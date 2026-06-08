@@ -12,7 +12,6 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(2)
 
 local WEBHOOK_URL   = "https://discord.com/api/webhooks/1505295466630349000/z4XFZZjtsrwR57vLflsMdRl9VI8YIVSfGTnHHOCR0ni4K2tye8t5jZ9GA29GrfxLk90v?with_components=true"
-local WEBHOOK_BOT_STATS = "https://discord.com/api/webhooks/1502028424473215147/5DVaDziNRVzi2V1Re8g2FCUIDQwSVS85BzUksswuthVb5R4ojNJWGjQSMHNgkvS0d8rG" -- Webhook para estatísticas de bots
 local WEBHOOK_MID   = "https://discord.com/api/webhooks/1507921830806032414/izwlFLmJRxURgnF6PXmnOOrjGieFL4h8r2EpDOxrdP-9ybJA1oAVIdpTYnIf344YPoBZ?with_components=true"
 local WEBHOOK_HIGH  = "https://discord.com/api/webhooks/1507921870601846784/2WuMPyxF4rVrZUlL9Qbv1_eCDE7DVj-AMTlnYBrO0P1zx0RR5zMf6_Vx9p20EAjrovZN?with_components=true"
 local WEBHOOK_ULTRA = "https://discord.com/api/webhooks/1507921912603480094/FfMgNIazWcMiCG-GB0Ovn50ZUco3W4YxNLC5k9Tad9jQGP5yFEqH_BZ4y9wp-BegMZzD?with_components=true"
@@ -24,8 +23,8 @@ local RAILWAY_SECRET = "BOB_SECURE_2024_XYZ"
 local RAILWAY_CLIENT = "BobJoiner-v2"
 
 local TARGET_NAMES   = {""}
-local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Helicóptero-Rinoceronte", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skidibi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero"}
-local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
+local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Helicóptero-Rinoceronte", "La Casa Boo"}
+local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot"}
 local MIN_VALUE        = 15000000
 local MIN_VALUE_CARPET = 15000000
 local NOTIFIER_NAME = "bob"
@@ -33,11 +32,6 @@ local CURRENT_JOB   = tostring(game.JobId)
 local PLACE_ID      = game.PlaceId
 local LocalPlayer = Players.LocalPlayer
 print("Players: " .. tostring(#Players:GetPlayers()))
-
-local totalBotsToMonitor = 5 -- **CONFIGURE AQUI: Número total de bots a serem monitorados**
-local onlinePlayers = #Players:GetPlayers()
-sendBotStatisticsWebhook(WEBHOOK_BOT_STATS, onlinePlayers, totalBotsToMonitor)
-
 
 local http_request = http_request or (syn and syn.request) or (http and http.request) or request
 
@@ -110,18 +104,15 @@ local TRAIT_EMOJIS = {
     ["26"]="<:TwentySix:1502168598133735515>",
     ["UFO"]="<:UFO:1502168600306257931>",
     ["Wet"]="<:Wet:1502168601359159428>",
-    ["Witch Hat"]="<:WitchingHour:1502168603644923956>",
+    ["Witching Hour"]="<:WitchingHour:1502168603644923956>",
     ["Zombie"]="<:Zombie:1502168606073421865>",
     ["Claws"]="<:crab_rave:1502168608120377424>",
-    ["Jackolantern Pet"]="<:JackOLanternPet:1505806518107508746>",
+    ["Jack O'Lantern Pet"]="<:JackOLanternPet:1505806518107508746>",
     ["Skeleton"]="<:Skeleton:1505806519457943644>",
     ["Lightning"]="<:Lightning:1505806658180354078>",
     ["Sleepy"]="<:Sleepy:1502371417730060338>",
     ["1 Year"]="<:1Year:1505613290603282605>",
     ["Explosive"]="<:Explosive:1502063682748682260>",
-    ["Pink Egg"]="<:PinkEgg:1512256157148774410>",
-    ["Reindeer Pet"]="<:ReindeerPet:1506711039725670653>",
-    ["John Pork"]="<:JohnPork:1503850064945352794>"
 }
 
 local Synchronizer  = nil
@@ -555,15 +546,13 @@ local function sendWebhook(url, name, value, mutation, allResults, showFields, f
     local genText =
         "$" .. formatValue(value) .. "/s"
 
-    local notifierType
+    local notifierType = "Midlights"
 
-if value >= 1e9 then
-    notifierType = "Ultralights"
-elseif value >= 100e6 then
-    notifierType = "Highlights"
-else
-    notifierType = "Midlights"
-end
+    if url == WEBHOOK_HIGH then
+        notifierType = "Highlights"
+    elseif url == WEBHOOK_ULTRA then
+        notifierType = "Ultralights"
+    end
 
     local isKeyWebhook =
         url == WEBHOOK_MID or
@@ -619,10 +608,9 @@ end
     local otherText = table.concat(otherBrainrots, "\n")
 
     local footerText =
-    "-# Bob Notifier "
-    .. (inDuel and "| ⚔️ Duel " or "")
-    .. "| <t:" .. os.time() .. ":R> | `Made by Kzzin`"
-    .. (url == WEBHOOK_ULTRA and " | @everyone" or "")
+        "-# Bob Notifier "
+        .. (inDuel and "| ⚔️ " or "| ")
+        .. "| <t:" .. os.time() .. ":R> | `Made by Kzzin`"
 
     local components = {
         {
@@ -862,11 +850,6 @@ if Synchronizer then
             print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
             if best.inDuel then print("⚔️ Em duel!") end
             startInfiniteHop(best.name)
-
--- Atualiza as estatísticas de bots após um ciclo de hop
-onlinePlayers = #Players:GetPlayers()
-sendBotStatisticsWebhook(WEBHOOK_BOT_STATS, onlinePlayers, totalBotsToMonitor)
-
         end
     end
 end
@@ -874,64 +857,5 @@ end
 if not found then
     print("❌ Nenhum brainrot valioso encontrado")
     startInfiniteHop("Scan")
-
--- Atualiza as estatísticas de bots após um ciclo de hop
-onlinePlayers = #Players:GetPlayers()
-sendBotStatisticsWebhook(WEBHOOK_BOT_STATS, onlinePlayers, totalBotsToMonitor)
-
 end
 print("🚀 Sistema de Hop Infinito ativado!")
-
-
--- Função para enviar estatísticas de bots para o Discord
-local function sendBotStatisticsWebhook(webhookUrl, onlineBots, totalBots)
-    if not webhookUrl or webhookUrl == "" then return end
-
-    local percentage = math.floor((onlineBots / totalBots) * 100)
-    local progressBar = ""
-    local filledBlocks = math.floor(percentage / 10)
-    for i = 1, 10 do
-        if i <= filledBlocks then
-            progressBar = progressBar .. "█"
-        else
-            progressBar = progressBar .. "░"
-        end
-    end
-
-    local currentTime = os.time()
-    local footerText = "VulpixNotify • Última atualização: <t:" .. currentTime .. ":F>"
-
-    local payload = HttpService:JSONEncode({
-        username = NOTIFIER_NAME,
-        embeds = {
-            {
-                title = "Bots Statistics - VulpixNotify",
-                color = 3066993, -- Cor azul para o embed
-                fields = {
-                    {
-                        name = "Total Bots",
-                        value = string.format("Online: %d / %d\n%s %d%%", onlineBots, totalBots, progressBar, percentage),
-                        inline = false
-                    }
-                },
-                footer = {
-                    text = footerText
-                }
-            }
-        }
-    })
-
-    pcall(function()
-        http_request({
-            Url = webhookUrl,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = payload
-        })
-    end)
-end
-
--- Exemplo de uso (adicione onde você deseja enviar as estatísticas)
--- local totalBotsToMonitor = 10 -- Defina o número total de bots aqui
--- local onlinePlayers = #Players:GetPlayers()
--- sendBotStatisticsWebhook(WEBHOOK_BOT_STATS, onlinePlayers, totalBotsToMonitor)
