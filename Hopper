@@ -25,9 +25,9 @@ task.wait(2)
 
 -- CONFIGURAÇÕES DE WEBHOOKS
 local WEBHOOK_URL   = "https://discord.com/api/webhooks/1515191414424604803/niOkEs52nJgBkd5gEd8vsWLDMfPJUDYrLab91Ae5FMqqZImfn7RsGOJfNnJpEPyMNkiN?with_components=true"
-local WEBHOOK_ULTRA = "https://discord.com/api/webhooks/1515190493376417893/u1KLCEl7cuLnjdABtxVvbMZA0SvNdTUK2IGc2PPucpvACRAZ3xCEPHNkw0htIJj2X5G-"
-local WEBHOOK_HIGH  = "https://discord.com/api/webhooks/1515190747140194435/-XAaAlONcWMeMHgwok-1oSSFf7wnac7HIn1L4cqzoyqo6S0LjP264UE-cinL0jaeTSO5"
-local WEBHOOK_MID   = "https://discord.com/api/webhooks/1515190046339235852/VqFj0_dxrgPoRU_FJfL4Axoano1u-9mpl_XSEo8fqF4SBt1-Oghu-9ZFV6PD3x96KbgF"
+local WEBHOOK_MID   = "https://discord.com/api/webhooks/1515190046339235852/VqFj0_dxrgPoRU_FJfL4Axoano1u-9mpl_XSEo8fqF4SBt1-Oghu-9ZFV6PD3x96KbgF?with_components=true"
+local WEBHOOK_HIGH  = "https://discord.com/api/webhooks/1515190747140194435/-XAaAlONcWMeMHgwok-1oSSFf7wnac7HIn1L4cqzoyqo6S0LjP264UE-cinL0jaeTSO5?with_components=true"
+local WEBHOOK_ULTRA = "https://discord.com/api/webhooks/1515190493376417893/u1KLCEl7cuLnjdABtxVvbMZA0SvNdTUK2IGc2PPucpvACRAZ3xCEPHNkw0htIJj2X5G-?with_components=true"
 
 -- ════ RAILWAY API (Bob Joiner Sync) ════
 local RAILWAY_API    = "https://bob-notifier.up.railway.app"
