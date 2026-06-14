@@ -1,26 +1,40 @@
+-- ══════════════════════════════════════════════════════════════
+--   BOB HOPPER V2.4 — BEEP SYNC EDITION
+-- ══════════════════════════════════════════════════════════════
 print("--- BOB NOTIFIER STARTING ---")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local RS = game:GetService("ReplicatedStorage")
-local vim = game:GetService("VirtualInputManager")
-vim:SendKeyEvent(true, Enum.KeyCode.F9, false, game)
-task.wait()
-vim:SendKeyEvent(false, Enum.KeyCode.F9, false, game)
+local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
+
+-- PRÉ-CARREGAMENTO DO SOM (MESMO DO JOINER)
+local BEEP_SOUND = Instance.new("Sound", CoreGui)
+BEEP_SOUND.SoundId = "rbxassetid://101314628073587"
+BEEP_SOUND.Volume = 1
+BEEP_SOUND.PlayOnRemove = false
+pcall(function() BEEP_SOUND:Play(); BEEP_SOUND:Stop() end)
+
+local function playBeep()
+    pcall(function() BEEP_SOUND:Play() end)
+end
+
 if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(2)
 
+-- CONFIGURAÇÕES DE WEBHOOKS
 local WEBHOOK_URL   = "https://discord.com/api/webhooks/1515191414424604803/niOkEs52nJgBkd5gEd8vsWLDMfPJUDYrLab91Ae5FMqqZImfn7RsGOJfNnJpEPyMNkiN?with_components=true"
-local WEBHOOK_MID   = "https://discord.com/api/webhooks/1515190046339235852/VqFj0_dxrgPoRU_FJfL4Axoano1u-9mpl_XSEo8fqF4SBt1-Oghu-9ZFV6PD3x96KbgF?with_components=true"
-local WEBHOOK_HIGH  = "https://discord.com/api/webhooks/1515190747140194435/-XAaAlONcWMeMHgwok-1oSSFf7wnac7HIn1L4cqzoyqo6S0LjP264UE-cinL0jaeTSO5?with_components=true"
-local WEBHOOK_ULTRA = "https://discord.com/api/webhooks/1515190493376417893/u1KLCEl7cuLnjdABtxVvbMZA0SvNdTUK2IGc2PPucpvACRAZ3xCEPHNkw0htIJj2X5G-?with_components=true"
+local WEBHOOK_ULTRA = "https://discord.com/api/webhooks/1515190493376417893/u1KLCEl7cuLnjdABtxVvbMZA0SvNdTUK2IGc2PPucpvACRAZ3xCEPHNkw0htIJj2X5G-"
+local WEBHOOK_HIGH  = "https://discord.com/api/webhooks/1515190747140194435/-XAaAlONcWMeMHgwok-1oSSFf7wnac7HIn1L4cqzoyqo6S0LjP264UE-cinL0jaeTSO5"
+local WEBHOOK_MID   = "https://discord.com/api/webhooks/1515190046339235852/VqFj0_dxrgPoRU_FJfL4Axoano1u-9mpl_XSEo8fqF4SBt1-Oghu-9ZFV6PD3x96KbgF"
 
--- ════ RAILWAY API (Bob Joiner) ════
+-- ════ RAILWAY API (Bob Joiner Sync) ════
 local RAILWAY_API    = "https://bob-notifier.up.railway.app"
 local RAILWAY_SECRET = "shadowbob2026"
 local RAILWAY_CLIENT = "Bobnotify"
 
+-- [LÓGICA DE SCAN E HOP CONTINUA ABAIXO...]
 local TARGET_NAMES   = {""}
 local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Helicóptero-Rinoceronte", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skidibi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
@@ -626,7 +640,7 @@ if Synchronizer then
             elseif best.value >= 100e6 then sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
             else sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) end
             sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName)
-            print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
+            playBeep(); print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
             startInfiniteHop(best.name)
         end
     end
