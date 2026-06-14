@@ -507,11 +507,17 @@ local function sendWebhook(url, name, value, mutation, allResults, showFields, f
     end)
 end
 
-local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName)
+local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, currentPlayers, maxPlayers, placeId)
     print("[RAILWAY] Enviando brainrot:", name)
     local body = HttpService:JSONEncode({
-        brainrot = name, name = name, jobId = tostring(jobId or ""),
-        value = tostring(math.floor(value or 0)), owner = tostring(ownerName or "Unknown")
+        brainrot = name, 
+        name = name, 
+        jobId = tostring(jobId or ""),
+        value = tostring(math.floor(value or 0)), 
+        owner = tostring(ownerName or "Unknown"),
+        players = tostring(currentPlayers or "?"),
+        maxPlayers = tostring(maxPlayers or "?"),
+        placeId = tostring(placeId or "109983668079237")
     })
     local ok, res = pcall(function()
         return http_request({
@@ -639,7 +645,7 @@ if Synchronizer then
             if best.value >= 1e9 or isUltraName then sendWebhook(WEBHOOK_ULTRA, best.name, best.value, best.mutation, results, false, "Ultra", best.ownerName, detectedJobId, false, best.inDuel)
             elseif best.value >= 100e6 then sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
             else sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) end
-            sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName)
+            sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName, #Players:GetPlayers(), Players.MaxPlayers, PLACE_ID)
             playBeep(); print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
             startInfiniteHop(best.name)
         end
