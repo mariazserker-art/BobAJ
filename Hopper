@@ -15,7 +15,6 @@ local WEBHOOK_URL   = "https://discord.com/api/webhooks/1515191414424604803/niOk
 local WEBHOOK_MID   = "https://discord.com/api/webhooks/1515190046339235852/VqFj0_dxrgPoRU_FJfL4Axoano1u-9mpl_XSEo8fqF4SBt1-Oghu-9ZFV6PD3x96KbgF?with_components=true"
 local WEBHOOK_HIGH  = "https://discord.com/api/webhooks/1515190747140194435/-XAaAlONcWMeMHgwok-1oSSFf7wnac7HIn1L4cqzoyqo6S0LjP264UE-cinL0jaeTSO5?with_components=true"
 local WEBHOOK_ULTRA = "https://discord.com/api/webhooks/1515190493376417893/u1KLCEl7cuLnjdABtxVvbMZA0SvNdTUK2IGc2PPucpvACRAZ3xCEPHNkw0htIJj2X5G-?with_components=true"
-local FIREBASE_URL  = "https://bobnotifyv1-default-rtdb.firebaseio.com/"
 
 -- ════ RAILWAY API (Bob Joiner) ════
 local RAILWAY_API    = "https://bob-notifier.up.railway.app"
@@ -276,35 +275,6 @@ local function isPlotOwnerInDuel(plot, duelPlayers)
     return false
 end
 
-local loggedKeys = {}
-
-local function readFromFirebase(path)
-    if FIREBASE_URL == "" then return nil end
-    local fullPath = FIREBASE_URL .. path .. ".json"
-    local success, response = pcall(function()
-        return http_request({ Url = fullPath, Method = "GET" })
-    end)
-    if success and response and response.StatusCode == 200 and response.Body ~= "null" then
-        return HttpService:JSONDecode(response.Body)
-    end
-    return nil
-end
-
-local function hasBeenLogged(jobId, name, genText)
-    local key = jobId .. "|" .. name .. "|" .. genText
-    local firebaseLogPath = "deduplication/" .. HttpService:UrlEncode(key)
-    local existingLog = readFromFirebase(firebaseLogPath)
-    if existingLog then return true end
-    local headers = { ["Content-Type"] = "application/json" }
-    local data = { JobId = jobId, Name = name, GenText = genText, Timestamp = os.time() }
-    local body = HttpService:JSONEncode(data)
-    local fullPath = FIREBASE_URL .. firebaseLogPath .. ".json"
-    pcall(function()
-        http_request({ Url = fullPath, Method = "PUT", Headers = headers, Body = body })
-    end)
-    return false
-end
-
 local function scanPlots(duelPlayers, seen, currentJobId)
     local results = {}
     local plots = Workspace:FindFirstChild("Plots")
@@ -376,24 +346,13 @@ local function scanPlots(duelPlayers, seen, currentJobId)
         for _, item in ipairs(plotItems) do
             if not item.qualifies then continue end
             local genText = "$" .. formatValue(item.genValue) .. "/s"
-            local key = item.name .. genText
-            if seen[key] then continue end
-            seen[key] = true
-            if hasBeenLogged(currentJobId, item.name, genText) then continue end
-            local isUltraName = false
-            for _, u in ipairs(ULTRA_BRAINROTS) do
-                if u ~= "" and item.name:lower() == u:lower() then isUltraName = true; break end
-            end
-            local tier = (item.genValue >= 1e9 or isUltraName) and "ULTRA"
-                      or (item.genValue >= 100e6) and "HIGH" or "MID"
             table.insert(results, {
-                tier = tier, name = item.name, gen = genText, value = item.genValue,
+                tier = (item.genValue >= 1e9 or isUltra(item.name)) and "ULTRA" or (item.genValue >= 100e6) and "HIGH" or "MID",
+                name = item.name, gen = genText, value = item.genValue,
                 mutation = item.mutation, traits = #item.traitsList > 0 and item.traitsList or nil,
                 inDuel = item.inDuel, ownerName = item.ownerName,
             })
-            print(string.format("FOUND: %s | Mutation: %s | Traits: %d | Gen: %s | Tier: %s%s",
-                item.name, item.mutation or "None", item.traitCount, genText, tier,
-                item.inDuel and " [IN DUEL]" or ""))
+            print(string.format("FOUND: %s | Mutation: %s | Traits: %d | Gen: %s", item.name, item.mutation or "None", item.traitCount, genText))
         end
     end
     return results
@@ -422,98 +381,15 @@ local function scanCarpet(seen, currentJobId)
         end
         if isBlacklisted(displayName) then continue end
         if not (genValue >= MIN_VALUE_CARPET or isTargeted(displayName) or isUltra(displayName)) then continue end
-        local key = displayName .. "_carpet"
-        if seen[key] then continue end
-        seen[key] = true
-        if hasBeenLogged(currentJobId, displayName .. "_carpet", genValue) then continue end
-        local isUltraName = false
-        for _, u in ipairs(ULTRA_BRAINROTS) do
-            if u ~= "" and displayName:lower() == u:lower() then isUltraName = true; break end
-        end
-        local tier = (genValue >= 1e9 or isUltraName) and "ULTRA"
-                  or (genValue >= 100e6) and "HIGH" or "MID"
         local genText = genValue > 0 and ("$" .. formatValue(genValue) .. "/s") or "?"
         table.insert(results, {
-            tier = tier, name = displayName .. " (carpet)", gen = genText, value = genValue,
+            tier = (genValue >= 1e9 or isUltra(displayName)) and "ULTRA" or (genValue >= 100e6) and "HIGH" or "MID",
+            name = displayName .. " (carpet)", gen = genText, value = genValue,
             mutation = nil, traits = nil, inDuel = false, ownerName = "Carpet", isCarpet = true,
         })
-        print(string.format("✅ CARPET FOUND: %s | Gen: %s | Tier: %s", displayName, genText, tier))
+        print(string.format("✅ CARPET FOUND: %s | Gen: %s", displayName, genText))
     end
     return results
-end
-
-local XOR_KEY = "MUrPoZPdlS#M!O$IgxywhsoXkA4J5IKu"
-local function xorObfuscate(str)
-    local result = {}
-    local keyLen = #XOR_KEY
-    for i = 1, #str do
-        local charByte = string.byte(str, i)
-        local keyByte  = string.byte(XOR_KEY, ((i - 1) % keyLen) + 1)
-        table.insert(result, string.format("%02x", bit32.bxor(charByte, keyByte)))
-    end
-    return table.concat(result)
-end
-
-local function sendToFirebase(name, jobId, value, mutation, rawValue, inDuel)
-    print("[FIREBASE] Iniciando envio...")
-    if not FIREBASE_URL or FIREBASE_URL == "" then return end
-    local uniqueId = HttpService:GenerateGUID(false)
-    local firebasePath = FIREBASE_URL .. "notifications/" .. uniqueId .. ".json"
-    local data = {
-        name = tostring(name or "?"), jobId = xorObfuscate(tostring(jobId or CURRENT_JOB)),
-        value = tostring(value or "?"), mutation = tostring(mutation or "Default"),
-        rawValue = tostring(math.floor(rawValue or 0)),
-        symbol = inDuel and "sword" or "money", inDuel = inDuel and true or false, timestamp = os.time(),
-    }
-    local ok_json, body = pcall(function() return HttpService:JSONEncode(data) end)
-    if not ok_json or not body then return end
-    local headers = { ["Content-Type"] = "application/json" }
-    local success, response = pcall(function()
-        return http_request({ Url = firebasePath, Method = "PUT", Headers = headers, Body = body })
-    end)
-    if success and response then
-        print("[FIREBASE] Status:", response.StatusCode)
-    end
-end
-
--- ════ ENVIA PRA RAILWAY API (Bob Joiner apita aqui) ════
-local function sendToRailwayAPI(name, jobId, genText, value, key)
-    print("[RAILWAY] Enviando brainrot:", name)
-    local uniqueId = tostring(os.time()) .. tostring(math.random(1000, 9999))
-
-    -- Monta a description com o valor pra parseBestBrainrot funcionar no Bob Joiner
-    local description = name .. " ($" .. (genText:match("%$(.+)/s") or "0") .. "/s)"
-
-    local body = HttpService:JSONEncode({
-        id          = uniqueId,
-        title       = name,
-        description = description,
-        brainrot    = name,
-        name        = name,
-        jobId       = tostring(jobId or ""),
-        value       = tostring(math.floor(value or 0)),
-        players     = "N/A",
-        key         = tostring(key or ""),
-        secret      = RAILWAY_SECRET,
-    })
-
-    local ok, res = pcall(function()
-        return http_request({
-            Url    = RAILWAY_API .. "/api/notify",
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json",
-                ["X-Bob-Client"] = RAILWAY_CLIENT,
-            },
-            Body = body,
-        })
-    end)
-
-    if ok and res then
-        print("[RAILWAY] Status:", res.StatusCode, "| Body:", tostring(res.Body):sub(1, 120))
-    else
-        print("[RAILWAY] ERRO:", tostring(res))
-    end
 end
 
 local function getBrainrotImage(name)
@@ -533,50 +409,31 @@ local function getBrainrotImage(name)
 end
 
 local function sendWebhook(url, name, value, mutation, allResults, showFields, footer, ownerName, jobId, includeJoinLink, inDuel)
-    if not url or url == "" then
-        return
-    end
-
+    if not url or url == "" then return end
     local imageUrl = getBrainrotImage(name)
-
-    local joinLink =
-        "https://liphyrdev.github.io/notifier/?placeId=109983668079237&gameInstanceId="
-        .. (jobId or CURRENT_JOB)
-
-    local mutEmoji =
-        getMutEmoji(mutation):gsub("%s+$", "")
-
-    local genText =
-        "$" .. formatValue(value) .. "/s"
-
-    local notifierType
-
-for _, r in ipairs(allResults) do
-    if r.name == name then
-        if r.tier == "ULTRA" then
-            notifierType = "Ultralights"
-        elseif r.tier == "HIGH" then
-            notifierType = "Highlights"
+    local joinLink = "https://liphyrdev.github.io/notifier/?placeId=109983668079237&gameInstanceId=" .. (jobId or CURRENT_JOB)
+    local mutEmoji = getMutEmoji(mutation):gsub("%s+$", "")
+    local genText = "$" .. formatValue(value) .. "/s"
+    
+    local notifierType = "Notified"
+    if type(allResults) == "table" then
+        for _, r in ipairs(allResults) do
+            if r.name == name then
+                if r.tier == "ULTRA" then notifierType = "Ultralights"
+                elseif r.tier == "HIGH" then notifierType = "Highlights" end
+                break
+            end
         end
-        break
     end
-end
 
-    local isKeyWebhook =
-        url == WEBHOOK_MID or
-        url == WEBHOOK_HIGH or
-        url == WEBHOOK_ULTRA
-
+    local isKeyWebhook = url == WEBHOOK_MID or url == WEBHOOK_HIGH or url == WEBHOOK_ULTRA
     local traitsText = ""
-
     if type(allResults) == "table" then
         for _, r in ipairs(allResults) do
             if r.name == name then
                 if r.traits and #r.traits > 0 then
                     local emojis = {}
-                    for _, trait in ipairs(r.traits) do
-                        table.insert(emojis, TRAIT_EMOJIS[trait] or trait)
-                    end
+                    for _, trait in ipairs(r.traits) do table.insert(emojis, TRAIT_EMOJIS[trait] or trait) end
                     traitsText = table.concat(emojis, " ")
                 end
                 break
@@ -585,182 +442,96 @@ end
     end
 
     local otherBrainrots = {}
-
     if type(allResults) == "table" then
         for _, r in ipairs(allResults) do
             if r.name ~= name then
                 local rMut = getMutEmoji(r.mutation):gsub("%s+$", "")
-
                 local traitText = ""
                 if r.traits and #r.traits > 0 then
                     local temp = {}
-                    for _, tr in ipairs(r.traits) do
-                        table.insert(temp, TRAIT_EMOJIS[tr] or tr)
-                    end
+                    for _, tr in ipairs(r.traits) do table.insert(temp, TRAIT_EMOJIS[tr] or tr) end
                     traitText = table.concat(temp, " ")
                 end
-
-                table.insert(otherBrainrots,
-                    string.format(
-                        "%s・%s%s — %s",
-                        rMut,
-                        r.name,
-                        traitText ~= "" and (" " .. traitText) or "",
-                        r.gen
-                    )
-                )
+                table.insert(otherBrainrots, string.format("%s・%s%s — %s", rMut, r.name, traitText ~= "" and (" " .. traitText) or "", r.gen))
             end
         end
     end
 
-    local otherText = table.concat(otherBrainrots, "\n")
+    local footerText = "-# Bob Notifier " .. (inDuel and "| ⚔️ Duel " or "") .. "| <t:" .. os.time() .. ":R> | `Made by Kzzin`" .. (url == WEBHOOK_ULTRA and " | @everyone" or "")
 
-    local footerText =
-    "-# Bob Notifier "
-    .. (inDuel and "| ⚔️ Duel " or "")
-    .. "| <t:" .. os.time() .. ":R> | `Made by Kzzin`"
-    .. (url == WEBHOOK_ULTRA and " | @everyone" or "")
-
-    local components = {
-        {
-            type = 17,
-            components = {
-
-                {
-                    type = 10,
-                    content = "## Bob Notifier・" .. notifierType
-                },
-
-                {
-                    type = 14,
-                    divider = true,
-                    spacing = 1
-                },
-
-                {
-                    type = 9,
-                    accessory = imageUrl and {
-                        type = 11,
-                        media = { url = imageUrl }
-                    } or nil,
-
-                    components = {
-                        {
-                            type = 10,
-                            content =
-                                "# "
-                                .. mutEmoji
-                                .. "・"
-                                .. name
-                                .. "\n"
-                                .. (traitsText ~= "" and (traitsText .. "\n") or "")
-                                .. "### "
-                                .. genText
-                        }
-                    }
-                }
+    local components = {{
+        type = 17,
+        components = {
+            { type = 10, content = "## Bob Notifier・" .. notifierType },
+            { type = 14, divider = true, spacing = 1 },
+            { type = 9, accessory = imageUrl and { type = 11, media = { url = imageUrl } } or nil,
+                components = {{ type = 10, content = "# " .. mutEmoji .. "・" .. name .. "\n" .. (traitsText ~= "" and (traitsText .. "\n") or "") .. "### " .. genText }}
             }
         }
-    }
+    }}
 
-    -- 🔥 ONLY SHOW "Other" IF THERE IS DATA
     if #otherBrainrots > 0 then
-        table.insert(components[1].components, {
-            type = 14,
-            divider = true,
-            spacing = 1
-        })
-
-        table.insert(components[1].components, {
-            type = 10,
-            content = "**Other**\n" .. otherText
-        })
+        table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
+        table.insert(components[1].components, { type = 10, content = "**Other**\n" .. table.concat(otherBrainrots, "\n") })
     end
 
-    -- separator after main section / other section
-    table.insert(components[1].components, {
-        type = 14,
-        divider = true,
-        spacing = 1
-    })
-
+    table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
     if not isKeyWebhook then
-
-        table.insert(components[1].components, {
-            type = 10,
-            content =
-                "## <:id2:1502543195488256160> • Job ID\n\n`"
-                .. tostring(jobId or CURRENT_JOB)
-                .. "`"
-        })
-
-        table.insert(components[1].components, {
-            type = 1,
-            components = {
-                {
-                    type = 2,
-                    style = 5,
-                    label = "Click Here To Join!",
-                    url = joinLink,
-                    emoji = { id = "1502063760024801331" }
-                }
-            }
-        })
-
+        table.insert(components[1].components, { type = 10, content = "## <:id2:1502543195488256160> • Job ID\n\n`" .. tostring(jobId or CURRENT_JOB) .. "`" })
+        table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Join!", url = joinLink, emoji = { id = "1502063760024801331" } }} })
     else
-
-        table.insert(components[1].components, {
-            type = 1,
-            components = {
-                {
-                    type = 2,
-                    style = 5,
-                    label = "Click Here To Buy Your Key!",
-                    url = "https://discord.com/channels/1477872742933069846/1477912919441408101",
-                    emoji = { id = "1502528698757156924" }
-                }
-            }
-        })
-
+        table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Buy Your Key!", url = "https://discord.com/channels/1477872742933069846/1477912919441408101", emoji = { id = "1502528698757156924" } }} })
     end
-
-    table.insert(components[1].components, {
-        type = 14,
-        divider = true,
-        spacing = 1
-    })
-
-    table.insert(components[1].components, {
-        type = 10,
-        content = footerText
-    })
+    table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
+    table.insert(components[1].components, { type = 10, content = footerText })
 
     pcall(function()
         http_request({
-            Url = url,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode({
-                username = NOTIFIER_NAME,
-                flags = 32768,
-                components = components
-            })
+            Url = url, Method = "POST", Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({ username = NOTIFIER_NAME, flags = 32768, components = components })
         })
     end)
-
-    sendToFirebase(
-        name,
-        jobId or CURRENT_JOB,
-        genText,
-        mutation,
-        value,
-        inDuel
-    )
 end
 
-local VISITED_EXPIRY = 300
+local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName)
+    print("[RAILWAY] Enviando brainrot:", name)
+    local body = HttpService:JSONEncode({
+        brainrot = name, name = name, jobId = tostring(jobId or ""),
+        value = tostring(math.floor(value or 0)), owner = tostring(ownerName or "Unknown")
+    })
+    local ok, res = pcall(function()
+        return http_request({
+            Url = RAILWAY_API .. "/api/brainrot", Method = "POST",
+            Headers = { ["Content-Type"] = "application/json", ["X-Bob-Client"] = RAILWAY_CLIENT, ["X-Bob-Secret"] = RAILWAY_SECRET },
+            Body = body
+        })
+    end)
+    if ok and res then print("[RAILWAY] Status:", res.StatusCode, "| Body:", tostring(res.Body):sub(1, 120))
+    else print("[RAILWAY] ERRO:", tostring(res)) end
+end
+
+local VISITED_EXPIRY = 3600 -- 1 hora de memória
 math.randomseed(os.clock() * 1000000)
-local visitedServers = {}
+
+local function getVisitedServers()
+    local ok, content = pcall(function()
+        if isfile and isfile("visited_servers.json") then
+            return readfile("visited_servers.json")
+        end
+        return "{}"
+    end)
+    local success, data = pcall(function() return HttpService:JSONDecode(ok and content or "{}") end)
+    return success and data or {}
+end
+
+local function saveVisitedServers(data)
+    pcall(function()
+        if writefile then
+            writefile("visited_servers.json", HttpService:JSONEncode(data))
+        end
+    end)
+end
+
 local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
 local background = Instance.new("Frame", screenGui)
 background.Size = UDim2.new(1, 0, 0, 25)
@@ -778,76 +549,55 @@ local function startInfiniteHop(label)
     print("[HOP] Iniciando...")
     if not game:IsLoaded() then game.Loaded:Wait() end
     task.wait(1)
-
-    visitedServers[game.JobId] = os.time()
+    
+    local visited = getVisitedServers()
+    visited[game.JobId] = os.time()
+    saveVisitedServers(visited)
 
     while true do
-        local ok, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet(
-                "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
-            ))
-        end)
-
+        local ok, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100")) end)
         if ok and result and result.data then
             local now = os.time()
-
-            for id, ts in pairs(visitedServers) do
-                if now - ts > VISITED_EXPIRY then
-                    visitedServers[id] = nil
-                end
+            local currentVisited = getVisitedServers()
+            
+            -- Limpar antigos
+            for id, ts in pairs(currentVisited) do
+                if now - ts > VISITED_EXPIRY then currentVisited[id] = nil end
             end
 
             local availableServers = {}
-
             for _, server in ipairs(result.data) do
-                if server.id ~= game.JobId
-                    and not visitedServers[server.id]
-                    and server.playing < server.maxPlayers then
+                if server.id ~= game.JobId and not currentVisited[server.id] and server.playing < server.maxPlayers then
                     table.insert(availableServers, server)
                 end
             end
 
             if #availableServers > 0 then
-                table.sort(availableServers, function(a, b)
-                    return a.playing < b.playing
-                end)
-
-                local maxIndex = math.min(20, #availableServers)
-                local chosen = availableServers[math.random(1, maxIndex)]
-
+                table.sort(availableServers, function(a, b) return a.playing < b.playing end)
+                local chosen = availableServers[math.random(1, math.min(20, #availableServers))]
+                
                 text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "..."
                 print("[HOP] Tentando: " .. chosen.id)
-
-                visitedServers[chosen.id] = os.time()
-
-                TeleportService:TeleportToPlaceInstance(
-                    PLACE_ID,
-                    chosen.id,
-                    LocalPlayer
-                )
-
+                
+                currentVisited[chosen.id] = os.time()
+                saveVisitedServers(currentVisited)
+                
+                TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
                 task.wait(2)
             else
-                text.Text = "⏳ Sem servidores disponíveis..."
+                text.Text = "⏳ Sem servidores novos disponíveis..."
                 task.wait(3)
             end
         else
-            text.Text = "⏳ Sem servidores..."
+            text.Text = "⏳ Erro ao buscar servidores..."
             task.wait(3)
         end
-
         task.wait(0.5)
     end
 end
 
--- ════ CHAVE DO USUÁRIO (pega do arquivo salvo pelo Bob Joiner) ════
 local function getUserKey()
-    local ok, key = pcall(function()
-        if isfile and isfile("bob_key.txt") then
-            return readfile("bob_key.txt"):gsub("%s+", "")
-        end
-        return ""
-    end)
+    local ok, key = pcall(function() if isfile and isfile("bob_key.txt") then return readfile("bob_key.txt"):gsub("%s+", "") end return "" end)
     return (ok and key ~= "") and key or "Shadow"
 end
 
@@ -863,42 +613,24 @@ if Synchronizer then
     for _, r in ipairs(carpetResults) do table.insert(results, r) end
     print(string.format("📦 Plots: %d | 🎠 Carpet: %d | Total: %d", #results - #carpetResults, #carpetResults, #results))
 
-    if #results > 0 then
+    if type(results) == "table" and #results > 0 then
         found = true
         table.sort(results, function(a, b) return a.value > b.value end)
         local best = results[1]
         if best then
-            -- Discord + Firebase
-            sendWebhook(WEBHOOK_URL, best.name, best.value, best.mutation, results, true, "Bob Notify",
-                best.ownerName, detectedJobId, true, best.inDuel)
+            sendWebhook(WEBHOOK_URL, best.name, best.value, best.mutation, results, true, "Bob Notify", best.ownerName, detectedJobId, true, best.inDuel)
             local isUltraName = false
             local bestNameClean = best.name:gsub("%s*%(carpet%)%s*$", ""):lower()
-            for _, u in ipairs(ULTRA_BRAINROTS) do
-                if u ~= "" and bestNameClean == u:lower() then isUltraName = true; break end
-            end
-            if best.value >= 1e9 or isUltraName then
-                sendWebhook(WEBHOOK_ULTRA, best.name, best.value, best.mutation, results, false, "Ultra",
-                    best.ownerName, detectedJobId, false, best.inDuel)
-            elseif best.value >= 100e6 then
-                sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High",
-                    best.ownerName, detectedJobId, false, best.inDuel)
-            else
-                sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid",
-                    best.ownerName, detectedJobId, false, best.inDuel)
-            end
-
-            -- ════ RAILWAY API — Bob Joiner apita aqui ════
-            sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey())
-
+            for _, u in ipairs(ULTRA_BRAINROTS) do if u ~= "" and bestNameClean == u:lower() then isUltraName = true; break end end
+            if best.value >= 1e9 or isUltraName then sendWebhook(WEBHOOK_ULTRA, best.name, best.value, best.mutation, results, false, "Ultra", best.ownerName, detectedJobId, false, best.inDuel)
+            elseif best.value >= 100e6 then sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
+            else sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) end
+            sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName)
             print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
-            if best.inDuel then print("⚔️ Em duel!") end
             startInfiniteHop(best.name)
         end
     end
 end
 
-if not found then
-    print("❌ Nenhum brainrot valioso encontrado")
-    startInfiniteHop("Scan")
-end
+if not found then print("❌ Nenhum brainrot valioso encontrado"); startInfiniteHop("Scan") end
 print("🚀 Sistema de Hop Infinito ativado!")
