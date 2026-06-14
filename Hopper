@@ -509,6 +509,9 @@ end
 
 local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, currentPlayers, maxPlayers, placeId)
     print("[RAILWAY] Enviando brainrot:", name)
+    print("[RAILWAY] Players:", currentPlayers, "/", maxPlayers)
+    print("[RAILWAY] JobID:", jobId)
+    print("[RAILWAY] Value:", value)
     local body = HttpService:JSONEncode({
         brainrot = name, 
         name = name, 
@@ -519,6 +522,7 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
         maxPlayers = tostring(maxPlayers or "?"),
         placeId = tostring(placeId or "109983668079237")
     })
+    print("[RAILWAY] Body:", body)
     local ok, res = pcall(function()
         return http_request({
             Url = RAILWAY_API .. "/api/brainrot", Method = "POST",
@@ -526,8 +530,11 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
             Body = body
         })
     end)
-    if ok and res then print("[RAILWAY] Status:", res.StatusCode, "| Body:", tostring(res.Body):sub(1, 120))
-    else print("[RAILWAY] ERRO:", tostring(res)) end
+    if ok and res then 
+        print("[RAILWAY] Status:", res.StatusCode, "| Body:", tostring(res.Body):sub(1, 120))
+    else 
+        print("[RAILWAY] ERRO:", tostring(res)) 
+    end
 end
 
 local VISITED_EXPIRY = 3600 -- 1 hora de memória
