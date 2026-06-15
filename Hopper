@@ -508,10 +508,6 @@ local function sendWebhook(url, name, value, mutation, allResults, showFields, f
 end
 
 local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, currentPlayers, maxPlayers, placeId)
-    print("[RAILWAY] Enviando brainrot:", name)
-    print("[RAILWAY] Players:", currentPlayers, "/", maxPlayers)
-    print("[RAILWAY] JobID:", jobId)
-    print("[RAILWAY] Value:", value)
     local body = HttpService:JSONEncode({
         brainrot = name, 
         name = name, 
@@ -522,19 +518,13 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
         maxPlayers = tostring(maxPlayers or "?"),
         placeId = tostring(placeId or "109983668079237")
     })
-    print("[RAILWAY] Body:", body)
-    local ok, res = pcall(function()
-        return http_request({
+    pcall(function()
+        http_request({
             Url = RAILWAY_API .. "/api/brainrot", Method = "POST",
             Headers = { ["Content-Type"] = "application/json", ["X-Bob-Client"] = RAILWAY_CLIENT, ["X-Bob-Secret"] = RAILWAY_SECRET },
             Body = body
         })
     end)
-    if ok and res then 
-        print("[RAILWAY] Status:", res.StatusCode, "| Body:", tostring(res.Body):sub(1, 120))
-    else 
-        print("[RAILWAY] ERRO:", tostring(res)) 
-    end
 end
 
 local VISITED_EXPIRY = 3600 -- 1 hora de memória
@@ -653,7 +643,8 @@ if Synchronizer then
             elseif best.value >= 100e6 then sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
             else sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) end
             sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName, #Players:GetPlayers(), Players.MaxPlayers, PLACE_ID)
-            playBeep(); print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
+            -- playBeep() comentado - o bipe agora só toca no Joiner após os filtros
+            print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
             startInfiniteHop(best.name)
         end
     end
