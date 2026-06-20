@@ -590,16 +590,42 @@ local function startInfiniteHop(label)
             end
 
             if #availableServers > 0 then
-                table.sort(availableServers, function(a, b) return a.playing < b.playing end)
-                local chosen = availableServers[math.random(1, math.min(20, #availableServers))]
+                -- SISTEMA DE PRIORIDADE: 6-8 players (range ideal!)
+                local priorityServers = {}
+                local normalServers = {}
                 
-                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "..."
-                print("[HOP] Tentando: " .. chosen.id)
+                for _, server in ipairs(availableServers) do
+                    if server.playing >= 6 and server.playing <= 8 then
+                        table.insert(priorityServers, server)
+                    else
+                        table.insert(normalServers, server)
+                    end
+                end
+                
+                local chosen
+                -- 80% de chance de escolher servidor prioritário (6-8 players)
+                if #priorityServers > 0 and math.random() < 0.8 then
+                    chosen = priorityServers[math.random(1, #priorityServers)]
+                    print("[HOP] 🎯 Servidor PRIORITÁRIO (6-8 players)!")
+                else
+                    table.sort(availableServers, function(a, b) return a.playing < b.playing end)
+                    chosen = availableServers[math.random(1, math.min(20, #availableServers))]
+                end
+                
+                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "... (" .. chosen.playing .. "/8)"
+                print("[HOP] Tentando: " .. chosen.id .. " | Players: " .. chosen.playing)
                 
                 currentVisited[chosen.id] = os.time()
                 saveVisitedServers(currentVisited)
                 
-                TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
+                local teleportSuccess, teleportErr = pcall(function()
+                    TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
+                end)
+                
+                if not teleportSuccess then
+                    print("[HOP] ⚠️ Erro no teleporte: " .. tostring(teleportErr))
+                end
+                
                 task.wait(2)
             else
                 text.Text = "⏳ Sem servidores novos disponíveis..."
