@@ -17,16 +17,11 @@ BEEP_SOUND.PlayOnRemove = false
 pcall(function() BEEP_SOUND:Play(); BEEP_SOUND:Stop() end)
 
 local function playBeep()
-    -- Função desabilitada - o bipe agora só toca no Joiner após os filtros
-    -- pcall(function() BEEP_SOUND:Play() end)
+    pcall(function() BEEP_SOUND:Play() end)
 end
 
 if not game:IsLoaded() then game.Loaded:Wait() end
-
--- Delay aleatório para evitar sincronização perfeita entre contas (0.5s a 2.5s)
-local randomDelay = 0.5 + (math.random() * 2)
-print(string.format("[INIT] Delay anti-sync: %.2fs", randomDelay))
-task.wait(randomDelay)
+task.wait(2)
 
 -- CONFIGURAÇÕES DE WEBHOOKS
 local WEBHOOK_URL   = "https://discord.com/api/webhooks/1515191414424604803/niOkEs52nJgBkd5gEd8vsWLDMfPJUDYrLab91Ae5FMqqZImfn7RsGOJfNnJpEPyMNkiN?with_components=true"
@@ -43,8 +38,8 @@ local RAILWAY_CLIENT = "Bobnotify"
 local TARGET_NAMES   = {""}
 local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Helicóptero-Rinoceronte", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skidibi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
-local MIN_VALUE        = 10000000 -- Reduzido de 100 para 50 (MAIS brainrots!)
-local MIN_VALUE_CARPET = 10000000 -- Reduzido de 150 para 100
+local MIN_VALUE        = 10000000
+local MIN_VALUE_CARPET = 10000000
 local NOTIFIER_NAME = "bob"
 local CURRENT_JOB   = tostring(game.JobId)
 local PLACE_ID      = game.PlaceId
@@ -71,10 +66,10 @@ local MUTATION_EMOJIS = {
     ["Cyber"]       = "<:MutCyber:1500618465680293910>",
 }
 local function getMutEmoji(mutation)
-    if not mutation or mutation == "" or (type(mutation) == "string" and mutation:lower() == "none") then
+    if not mutation or mutation == "" or mutation:lower() == "none" then
         return "<:MutDefault:1500616721373855780> "
     end
-    return (MUTATION_EMOJIS[mutation] or ("[" .. tostring(mutation) .. "]")) .. " "
+    return (MUTATION_EMOJIS[mutation] or ("[" .. mutation .. "]")) .. " "
 end
 
 local TRAIT_EMOJIS = {
@@ -165,7 +160,6 @@ local function parseValue(text)
 end
 
 local function formatValue(n)
-    if not n or type(n) ~= "number" then return "0" end
     if n >= 1e12 then return string.format("%.1fT", n/1e12) end
     if n >= 1e9  then return string.format("%.1fB", n/1e9)  end
     if n >= 1e6  then return string.format("%.1fM", n/1e6)  end
@@ -430,41 +424,17 @@ end
 
 local function sendWebhook(url, name, value, mutation, allResults, showFields, footer, ownerName, jobId, includeJoinLink, inDuel)
     if not url or url == "" then return end
-    
-    -- VALIDAÇÃO DE PARÂMETROS
-    name = tostring(name or "Unknown")
-    value = tonumber(value) or 0
-    jobId = jobId or CURRENT_JOB
-    
-    -- VERIFICAR SE JÁ FOI ENVIADO POR OUTRA CONTA
-    local checkSuccess = pcall(function()
-        if wasWebhookSent(jobId, name) then
-            print(string.format("[WEBHOOK] ⚠️ Pulando envio duplicado: %s (já enviado por outra conta)", name))
-            return true
-        end
-    end)
-    
-    if checkSuccess then return end
-    
-    local imageUrl = nil
-    pcall(function()
-        imageUrl = getBrainrotImage(name)
-    end)
-    
-    local joinLink = "https://liphyrdev.github.io/notifier/?placeId=109983668079237&gameInstanceId=" .. tostring(jobId)
-    local mutEmoji = ""
-    pcall(function()
-        mutEmoji = (getMutEmoji(mutation) or ""):gsub("%s+$", "")
-    end)
+    local imageUrl = getBrainrotImage(name)
+    local joinLink = "https://liphyrdev.github.io/notifier/?placeId=109983668079237&gameInstanceId=" .. (jobId or CURRENT_JOB)
+    local mutEmoji = getMutEmoji(mutation):gsub("%s+$", "")
     local genText = "$" .. formatValue(value) .. "/s"
     
-    local notifierType = "Midlights"
+    local notifierType = "Notified"
     if type(allResults) == "table" then
         for _, r in ipairs(allResults) do
             if r.name == name then
                 if r.tier == "ULTRA" then notifierType = "Ultralights"
-                elseif r.tier == "HIGH" then notifierType = "Highlights"
-                elseif r.tier == "MID" then notifierType = "Midlights" end
+                elseif r.tier == "HIGH" then notifierType = "Highlights" end
                 break
             end
         end
@@ -472,105 +442,72 @@ local function sendWebhook(url, name, value, mutation, allResults, showFields, f
 
     local isKeyWebhook = url == WEBHOOK_MID or url == WEBHOOK_HIGH or url == WEBHOOK_ULTRA
     local traitsText = ""
-    pcall(function()
-        if type(allResults) == "table" then
-            for _, r in ipairs(allResults) do
-                if r.name == name then
-                    if r.traits and type(r.traits) == "table" and #r.traits > 0 then
-                        local emojis = {}
-                        for _, trait in ipairs(r.traits) do 
-                            local emoji = TRAIT_EMOJIS[trait] or tostring(trait)
-                            table.insert(emojis, emoji) 
-                        end
-                        traitsText = table.concat(emojis, " ")
-                    end
-                    break
+    if type(allResults) == "table" then
+        for _, r in ipairs(allResults) do
+            if r.name == name then
+                if r.traits and #r.traits > 0 then
+                    local emojis = {}
+                    for _, trait in ipairs(r.traits) do table.insert(emojis, TRAIT_EMOJIS[trait] or trait) end
+                    traitsText = table.concat(emojis, " ")
                 end
+                break
             end
         end
-    end)
+    end
 
     local otherBrainrots = {}
-    local otherSuccess, otherErr = pcall(function()
-        if type(allResults) == "table" then
-            for i, r in ipairs(allResults) do
-                if r and r.name then
-                    -- Pular o primeiro resultado (que é o melhor/principal)
-                    if i > 1 then
-                        local rMut = ""
-                        pcall(function()
-                            rMut = (getMutEmoji(r.mutation) or ""):gsub("%s+$", "")
-                        end)
-                        local traitText = ""
-                        if r.traits and type(r.traits) == "table" and #r.traits > 0 then
-                            local temp = {}
-                            for _, tr in ipairs(r.traits) do 
-                                table.insert(temp, TRAIT_EMOJIS[tr] or tostring(tr)) 
-                            end
-                            traitText = table.concat(temp, " ")
-                        end
-                        local gen = r.gen or "?"
-                        local brainrotName = r.name or "Unknown"
-                        table.insert(otherBrainrots, string.format("%s・%s%s — %s", rMut, brainrotName, traitText ~= "" and (" " .. traitText) or "", gen))
-                    end
+    if type(allResults) == "table" then
+        for _, r in ipairs(allResults) do
+            if r.name ~= name then
+                local rMut = getMutEmoji(r.mutation):gsub("%s+$", "")
+                local traitText = ""
+                if r.traits and #r.traits > 0 then
+                    local temp = {}
+                    for _, tr in ipairs(r.traits) do table.insert(temp, TRAIT_EMOJIS[tr] or tr) end
+                    traitText = table.concat(temp, " ")
                 end
+                table.insert(otherBrainrots, string.format("%s・%s%s — %s", rMut, r.name, traitText ~= "" and (" " .. traitText) or "", r.gen))
             end
         end
-    end)
-    
-    if not otherSuccess then
-        print(string.format("[WEBHOOK] ⚠️ Erro ao processar Other: %s", tostring(otherErr)))
     end
-    
-    print(string.format("[WEBHOOK] Other brainrots: %d", #otherBrainrots))
 
     local footerText = "-# Bob Notifier " .. (inDuel and "| ⚔️ Duel " or "") .. "| <t:" .. os.time() .. ":R> | `Made by Kzzin`" .. (url == WEBHOOK_ULTRA and " | @everyone" or "")
 
-    local success, err = pcall(function()
-        local components = {{
-            type = 17,
-            components = {
-                { type = 10, content = "## Bob Notifier・" .. notifierType },
-                { type = 14, divider = true, spacing = 1 },
-                { type = 9, accessory = imageUrl and { type = 11, media = { url = imageUrl } } or nil,
-                    components = {{ type = 10, content = "# " .. mutEmoji .. "・" .. name .. "\n" .. (traitsText ~= "" and (traitsText .. "\n") or "") .. "### " .. genText }}
-                }
+    local components = {{
+        type = 17,
+        components = {
+            { type = 10, content = "## Bob Notifier・" .. notifierType },
+            { type = 14, divider = true, spacing = 1 },
+            { type = 9, accessory = imageUrl and { type = 11, media = { url = imageUrl } } or nil,
+                components = {{ type = 10, content = "# " .. mutEmoji .. "・" .. name .. "\n" .. (traitsText ~= "" and (traitsText .. "\n") or "") .. "### " .. genText }}
             }
-        }}
+        }
+    }}
 
-        if #otherBrainrots > 0 then
-            table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
-            table.insert(components[1].components, { type = 10, content = "**Other**\n" .. table.concat(otherBrainrots, "\n") })
-        end
-
+    if #otherBrainrots > 0 then
         table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
-        if not isKeyWebhook then
-            table.insert(components[1].components, { type = 10, content = "## <:id2:1502543195488256160> • Job ID\n\n`" .. tostring(jobId) .. "`" })
-            table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Join!", url = joinLink, emoji = { id = "1502063760024801331" } }} })
-        else
-            table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Buy Your Key!", url = "https://discord.com/channels/1477872742933069846/1477912919441408101", emoji = { id = "1502528698757156924" } }} })
-        end
-        table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
-        table.insert(components[1].components, { type = 10, content = footerText })
+        table.insert(components[1].components, { type = 10, content = "**Other**\n" .. table.concat(otherBrainrots, "\n") })
+    end
 
+    table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
+    if not isKeyWebhook then
+        table.insert(components[1].components, { type = 10, content = "## <:id2:1502543195488256160> • Job ID\n\n`" .. tostring(jobId or CURRENT_JOB) .. "`" })
+        table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Join!", url = joinLink, emoji = { id = "1502063760024801331" } }} })
+    else
+        table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Buy Your Key!", url = "https://discord.com/channels/1477872742933069846/1477912919441408101", emoji = { id = "1502528698757156924" } }} })
+    end
+    table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
+    table.insert(components[1].components, { type = 10, content = footerText })
+
+    pcall(function()
         http_request({
             Url = url, Method = "POST", Headers = { ["Content-Type"] = "application/json" },
             Body = HttpService:JSONEncode({ username = NOTIFIER_NAME, flags = 32768, components = components })
         })
     end)
-    
-    if success then
-        -- MARCAR WEBHOOK COMO ENVIADO APÓS SUCESSO
-        pcall(function()
-            markWebhookAsSent(jobId, name)
-        end)
-        print(string.format("[WEBHOOK] ✅ Enviado com sucesso: %s", name))
-    else
-        print(string.format("[WEBHOOK] ❌ Erro ao enviar: %s | Erro: %s", name, tostring(err)))
-    end
 end
 
-local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, currentPlayers, maxPlayers, placeId, inDuel)
+local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, currentPlayers, maxPlayers, placeId)
     local body = HttpService:JSONEncode({
         brainrot = name, 
         name = name, 
@@ -579,8 +516,7 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
         owner = tostring(ownerName or "Unknown"),
         players = tostring(currentPlayers or "?"),
         maxPlayers = tostring(maxPlayers or "?"),
-        placeId = tostring(placeId or "109983668079237"),
-        inDuel = inDuel or false
+        placeId = tostring(placeId or "109983668079237")
     })
     pcall(function()
         http_request({
@@ -591,15 +527,13 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
     end)
 end
 
-local VISITED_EXPIRY = 600 -- 10 minutos (era 15min) - MAIS AGRESSIVO = MAIS COVERAGE
-local VISITED_FILE = "bob_visited_servers.json" -- arquivo compartilhado entre contas
-local WEBHOOK_SENT_FILE = "bob_webhook_sent.json" -- controle de webhooks enviados
+local VISITED_EXPIRY = 3600 -- 1 hora de memória
 math.randomseed(os.clock() * 1000000)
 
 local function getVisitedServers()
     local ok, content = pcall(function()
-        if isfile and isfile(VISITED_FILE) then
-            return readfile(VISITED_FILE)
+        if isfile and isfile("visited_servers.json") then
+            return readfile("visited_servers.json")
         end
         return "{}"
     end)
@@ -610,89 +544,9 @@ end
 local function saveVisitedServers(data)
     pcall(function()
         if writefile then
-            writefile(VISITED_FILE, HttpService:JSONEncode(data))
+            writefile("visited_servers.json", HttpService:JSONEncode(data))
         end
     end)
-end
-
-local function getWebhooksSent()
-    local ok, content = pcall(function()
-        if isfile and isfile(WEBHOOK_SENT_FILE) then
-            return readfile(WEBHOOK_SENT_FILE)
-        end
-        return "{}"
-    end)
-    local success, data = pcall(function() return HttpService:JSONDecode(ok and content or "{}") end)
-    return success and data or {}
-end
-
-local function saveWebhooksSent(data)
-    pcall(function()
-        if writefile then
-            writefile(WEBHOOK_SENT_FILE, HttpService:JSONEncode(data))
-        end
-    end)
-end
-
-local function markWebhookAsSent(jobId, brainrotName)
-    local key = jobId .. "_" .. brainrotName:lower():gsub("%s+", "_")
-    local sent = getWebhooksSent()
-    sent[key] = os.time()
-    saveWebhooksSent(sent)
-    print(string.format("[WEBHOOK] ✅ Marcado como enviado: %s", key))
-end
-
-local function wasWebhookSent(jobId, brainrotName)
-    local key = jobId .. "_" .. brainrotName:lower():gsub("%s+", "_")
-    local sent = getWebhooksSent()
-    local now = os.time()
-    
-    -- Limpar webhooks antigas (mais de 30min)
-    local cleaned = false
-    for k, ts in pairs(sent) do
-        if now - ts > 1800 then
-            sent[k] = nil
-            cleaned = true
-        end
-    end
-    
-    if cleaned then
-        saveWebhooksSent(sent)
-    end
-    
-    if sent[key] then
-        print(string.format("[WEBHOOK] ⚠️ Webhook já enviado por outra conta: %s", key))
-        return true
-    end
-    
-    return false
-end
-
-local function markServerAsVisited(jobId)
-    local visited = getVisitedServers()
-    visited[jobId] = os.time()
-    saveVisitedServers(visited)
-    print(string.format("[MEMORY] ✅ Server %s marcado como visitado", string.sub(jobId, 1, 8)))
-end
-
-local function isServerVisited(jobId)
-    local visited = getVisitedServers()
-    local now = os.time()
-    
-    -- Limpar servidores expirados
-    local cleaned = false
-    for id, ts in pairs(visited) do
-        if now - ts > VISITED_EXPIRY then
-            visited[id] = nil
-            cleaned = true
-        end
-    end
-    
-    if cleaned then
-        saveVisitedServers(visited)
-    end
-    
-    return visited[jobId] ~= nil
 end
 
 local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
@@ -713,100 +567,49 @@ local function startInfiniteHop(label)
     if not game:IsLoaded() then game.Loaded:Wait() end
     task.wait(1)
     
-    -- Marcar servidor atual como visitado
-    markServerAsVisited(game.JobId)
+    local visited = getVisitedServers()
+    visited[game.JobId] = os.time()
+    saveVisitedServers(visited)
 
-    local hopAttempts = 0
-    local maxAttemptsBeforeReset = 30 -- Reduzido de 50 para 30 (reset mais rápido)
-    
     while true do
         local ok, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100")) end)
         if ok and result and result.data then
             local now = os.time()
+            local currentVisited = getVisitedServers()
             
+            -- Limpar antigos
+            for id, ts in pairs(currentVisited) do
+                if now - ts > VISITED_EXPIRY then currentVisited[id] = nil end
+            end
+
             local availableServers = {}
             for _, server in ipairs(result.data) do
-                -- Filtros: não é servidor atual, não foi visitado, tem espaço, não está cheio
-                if server.id ~= game.JobId 
-                   and not isServerVisited(server.id)
-                   and server.playing < server.maxPlayers 
-                   and server.playing > 0 then -- evita servers vazios
+                if server.id ~= game.JobId and not currentVisited[server.id] and server.playing < server.maxPlayers then
                     table.insert(availableServers, server)
                 end
             end
 
             if #availableServers > 0 then
-                -- SISTEMA DE PRIORIDADE INTELIGENTE
-                -- Servidores com 8-20 players têm maior chance de ter brainrots valiosos
-                local priorityServers = {}
-                local normalServers = {}
+                table.sort(availableServers, function(a, b) return a.playing < b.playing end)
+                local chosen = availableServers[math.random(1, math.min(20, #availableServers))]
                 
-                for _, server in ipairs(availableServers) do
-                    -- PRIORIDADE: 8-20 players (range ideal para encontrar brainrots)
-                    if server.playing >= 8 and server.playing <= 20 then
-                        table.insert(priorityServers, server)
-                    else
-                        table.insert(normalServers, server)
-                    end
-                end
+                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "..."
+                print("[HOP] Tentando: " .. chosen.id)
                 
-                local chosen
-                -- 70% de chance de escolher servidor prioritário se houver
-                if #priorityServers > 0 and math.random() < 0.7 then
-                    table.sort(priorityServers, function(a, b) return a.playing > b.playing end) -- mais players primeiro
-                    local poolSize = math.min(10, #priorityServers)
-                    chosen = priorityServers[math.random(1, poolSize)]
-                    print("[HOP] 🎯 Servidor PRIORITÁRIO escolhido!")
-                else
-                    -- Fallback: qualquer servidor disponível
-                    table.sort(availableServers, function(a, b) return a.playing < b.playing end)
-                    local poolSize = math.min(15, #availableServers)
-                    chosen = availableServers[math.random(1, poolSize)]
-                end
-                
-                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "... (" .. chosen.playing .. "/" .. chosen.maxPlayers .. ")"
-                print(string.format("[HOP] Tentando: %s | Players: %d/%d", string.sub(chosen.id, 1, 8), chosen.playing, chosen.maxPlayers))
-                
-                -- DELAY ALEATÓRIO ANTES DE MARCAR (0-2s) - espalha ainda mais as contas
-                local preMarkDelay = math.random() * 2
-                task.wait(preMarkDelay)
-                
-                -- Marcar ANTES de teleportar para evitar que outras contas entrem
-                markServerAsVisited(chosen.id)
+                currentVisited[chosen.id] = os.time()
+                saveVisitedServers(currentVisited)
                 
                 TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
-                task.wait(3) -- Espera para teleporte
+                task.wait(2)
             else
-                -- Sem servidores disponíveis
-                hopAttempts = hopAttempts + 1
-                
-                if hopAttempts >= maxAttemptsBeforeReset then
-                    print("[HOP] ⚠️ Resetando memória de servidores visitados (muitas tentativas falhadas)")
-                    -- Limpar memória parcialmente (manter só últimos 3 min ao invés de 5)
-                    local visited = getVisitedServers()
-                    local kept = {}
-                    local keptCount = 0
-                    for id, ts in pairs(visited) do
-                        if now - ts < 180 then -- últimos 3 min (mais agressivo)
-                            kept[id] = ts
-                            keptCount = keptCount + 1
-                        end
-                    end
-                    saveVisitedServers(kept)
-                    hopAttempts = 0
-                    print(string.format("[HOP] 🔄 Memória limpa! Servers mantidos: %d", keptCount))
-                end
-                
-                text.Text = "⏳ Sem servidores novos... (" .. hopAttempts .. "/" .. maxAttemptsBeforeReset .. ")"
-                print(string.format("[HOP] ⏳ Sem servers disponíveis. Tentativas: %d/%d", hopAttempts, maxAttemptsBeforeReset))
-                task.wait(3) -- Espera quando não há servidores (reduzido de 5s para 3s)
+                text.Text = "⏳ Sem servidores novos disponíveis..."
+                task.wait(3)
             end
         else
             text.Text = "⏳ Erro ao buscar servidores..."
-            print("[HOP] ❌ Erro ao buscar lista de servidores")
             task.wait(3)
         end
-        task.wait(1) -- Delay entre requisições
+        task.wait(0.5)
     end
 end
 
@@ -819,52 +622,19 @@ task.wait(2)
 local detectedJobId = game.JobId
 local found = false
 
--- ESTATÍSTICAS DE PERFORMANCE
-local STATS = {
-    serversScanned = 0,
-    brainrotsFound = 0,
-    webhooksSent = 0,
-    startTime = os.time()
-}
-
-local function printStats()
-    local elapsed = os.time() - STATS.startTime
-    local rate = STATS.serversScanned > 0 and (STATS.brainrotsFound / STATS.serversScanned * 100) or 0
-    print(string.format("📊 [STATS] Servers: %d | Brainrots: %d | Taxa: %.1f%% | Tempo: %ds", 
-        STATS.serversScanned, STATS.brainrotsFound, rate, elapsed))
-end
-
-STATS.serversScanned = STATS.serversScanned + 1
-
--- Verificar se já foi scaneado por outra conta recentemente
-if isServerVisited(detectedJobId) then
-    print("⚠️ Server já visitado recentemente por outra conta. Pulando...")
-    printStats()
-    startInfiniteHop("Skip")
-end
-
 if Synchronizer then
-    print("[SCAN] 🔍 Iniciando scan do servidor...")
-    local scanStart = os.clock()
-    
     local duelPlayers = getDuelPlayers()
     local seen = {}
     local results = scanPlots(duelPlayers, seen, detectedJobId)
     local carpetResults = scanCarpet(seen, detectedJobId)
     for _, r in ipairs(carpetResults) do table.insert(results, r) end
-    
-    local scanTime = os.clock() - scanStart
-    print(string.format("📦 Plots: %d | 🎠 Carpet: %d | Total: %d | ⏱️ Tempo: %.2fs", #results - #carpetResults, #carpetResults, #results, scanTime))
+    print(string.format("📦 Plots: %d | 🎠 Carpet: %d | Total: %d", #results - #carpetResults, #carpetResults, #results))
 
     if type(results) == "table" and #results > 0 then
         found = true
-        STATS.brainrotsFound = STATS.brainrotsFound + #results
-        
         table.sort(results, function(a, b) return a.value > b.value end)
         local best = results[1]
         if best then
-            STATS.webhooksSent = STATS.webhooksSent + 1
-            
             sendWebhook(WEBHOOK_URL, best.name, best.value, best.mutation, results, true, "Bob Notify", best.ownerName, detectedJobId, true, best.inDuel)
             local isUltraName = false
             local bestNameClean = best.name:gsub("%s*%(carpet%)%s*$", ""):lower()
@@ -872,18 +642,13 @@ if Synchronizer then
             if best.value >= 1e9 or isUltraName then sendWebhook(WEBHOOK_ULTRA, best.name, best.value, best.mutation, results, false, "Ultra", best.ownerName, detectedJobId, false, best.inDuel)
             elseif best.value >= 100e6 then sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
             else sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) end
-            sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName, #Players:GetPlayers(), Players.MaxPlayers, PLACE_ID, best.inDuel)
+            sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName, #Players:GetPlayers(), Players.MaxPlayers, PLACE_ID)
             -- playBeep() comentado - o bipe agora só toca no Joiner após os filtros
             print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
-            printStats()
             startInfiniteHop(best.name)
         end
     end
 end
 
-if not found then 
-    print("❌ Nenhum brainrot valioso encontrado")
-    printStats()
-    startInfiniteHop("Scan") 
-end
+if not found then print("❌ Nenhum brainrot valioso encontrado"); startInfiniteHop("Scan") end
 print("🚀 Sistema de Hop Infinito ativado!")
