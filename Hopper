@@ -64,6 +64,7 @@ local MUTATION_EMOJIS = {
     ["Radioactive"] = "<:MutRadioactive:1500618462496690330>",
     ["Divine"]      = "<:MutDivine:1500618464312692756>",
     ["Cyber"]       = "<:MutCyber:1500618465680293910>",
+    ["Phantom"]     = "<:Phantom_Mut:1518442006194557099>",
 }
 local function getMutEmoji(mutation)
     if not mutation or mutation == "" or mutation:lower() == "none" then
