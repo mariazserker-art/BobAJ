@@ -36,7 +36,7 @@ local RAILWAY_CLIENT = "Bobnotify"
 
 -- [LÓGICA DE SCAN E HOP CONTINUA ABAIXO...]
 local TARGET_NAMES   = {""}
-local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Helicóptero-Rinoceronte", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skidibi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero"}
+local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Helicóptero-Rinoceronte", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skidibi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero", "Kraken"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
 local MIN_VALUE        = 25000000
 local MIN_VALUE_CARPET = 25000000
@@ -64,7 +64,7 @@ local MUTATION_EMOJIS = {
     ["Radioactive"] = "<:MutRadioactive:1500618462496690330>",
     ["Divine"]      = "<:MutDivine:1500618464312692756>",
     ["Cyber"]       = "<:MutCyber:1500618465680293910>",
-    ["Phantom"]     = "<:Mut_Phantom:1518442006194557099>",
+    ["Phantom"]     = "<:MutPhantom:1518441817215864973>",
 }
 local function getMutEmoji(mutation)
     if not mutation or mutation == "" or mutation:lower() == "none" then
@@ -129,7 +129,10 @@ local TRAIT_EMOJIS = {
     ["Explosive"]="<:Explosive:1502063682748682260>",
     ["Pink Egg"]="<:PinkEgg:1512256157148774410>",
     ["Reindeer Pet"]="<:ReindeerPet:1506711039725670653>",
-    ["John Pork"]="<:JohnPork:1503850064945352794>"
+    ["John Pork"]="<:JohnPork:1503850064945352794>",
+    ["Sun"]="<:Sun:1518451022866022530>",
+    ["Aura Shades"]="<:AuraShades:1518450902795685908>",
+    ["Burger"]="<:Burger:1518450900413452380>",
 }
 
 local Synchronizer  = nil
@@ -430,16 +433,18 @@ local function sendWebhook(url, name, value, mutation, allResults, showFields, f
     local mutEmoji = getMutEmoji(mutation):gsub("%s+$", "")
     local genText = "$" .. formatValue(value) .. "/s"
     
-    local notifierType = "Notified"
-    if type(allResults) == "table" then
-        for _, r in ipairs(allResults) do
-            if r.name == name then
-                if r.tier == "ULTRA" then notifierType = "Ultralights"
-                elseif r.tier == "HIGH" then notifierType = "Highlights" end
-                break
-            end
+local notifierType = "Midlights"
+
+for _, r in ipairs(allResults) do
+    if r.name == name then
+        if r.tier == "ULTRA" then
+            notifierType = "Ultralights"
+        elseif r.tier == "HIGH" then
+            notifierType = "Highlights"
         end
+        break
     end
+end
 
     local isKeyWebhook = url == WEBHOOK_MID or url == WEBHOOK_HIGH or url == WEBHOOK_ULTRA
     local traitsText = ""
