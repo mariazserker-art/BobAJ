@@ -38,7 +38,7 @@ local RAILWAY_CLIENT = "Bobnotify"
 local TARGET_NAMES   = {""}
 local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Rhino Helicopterino", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skibidi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero", "Kraken"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "Lucky Block", "Los Taco Blocks", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
-local MIN_VALUE        = 30000000
+local MIN_VALUE        = 20000000
 local MIN_VALUE_CARPET = 20000000
 local NOTIFIER_NAME = "bob"
 local CURRENT_JOB   = tostring(game.JobId)
@@ -534,6 +534,10 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
 end
 
 local VISITED_EXPIRY = 3600 -- 1 hora de memória
+local API_RETRY_DELAY = 10 -- Delay inicial entre requisições (segundos)
+local API_MAX_DELAY = 60 -- Delay máximo
+local currentApiDelay = API_RETRY_DELAY
+
 math.randomseed(os.clock() * 1000000)
 
 local function getVisitedServers()
@@ -569,23 +573,86 @@ text.TextScaled = true
 text.Font = Enum.Font.SourceSansBold
 
 local function startInfiniteHop(label)
-    print("[HOP] Iniciando...")
+    print("[HOP] Iniciando sistema de hop infinito...")
+    print("[HOP] Label: " .. tostring(label))
+    print("[HOP] PlaceID: " .. tostring(PLACE_ID))
+    print("[HOP] Current JobId: " .. tostring(game.JobId))
+    
     if not game:IsLoaded() then game.Loaded:Wait() end
     task.wait(1)
     
     local visited = getVisitedServers()
     visited[game.JobId] = os.time()
     saveVisitedServers(visited)
+    print("[HOP] Servidor atual marcado como visitado")
+    
+    local lastServerList = nil
+    local lastApiCall = 0
 
     while true do
-        local ok, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100")) end)
-        if ok and result and result.data then
+        local now = os.time()
+        local timeSinceLastCall = now - lastApiCall
+        
+        -- Só faz nova requisição se passou tempo suficiente
+        if timeSinceLastCall < currentApiDelay and lastServerList ~= nil then
+            print("[HOP] ⏰ Aguardando " .. (currentApiDelay - timeSinceLastCall) .. "s antes da próxima chamada API (rate limit)")
+            task.wait(2)
+            -- Continua o loop sem fazer nova requisição
+        else
+            print("[HOP] 🌐 Buscando servidores disponíveis...")
+            lastApiCall = now
+            
+            local ok, result = pcall(function()
+                local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+                print("[HOP] 📡 Chamando API... (delay atual: " .. currentApiDelay .. "s)")
+                
+                -- Tenta com http_request primeiro
+                local response = http_request({
+                    Url = url,
+                    Method = "GET"
+                })
+                
+                if response and response.StatusCode == 200 then
+                    print("[HOP] ✅ HTTP Response: " .. response.StatusCode)
+                    currentApiDelay = API_RETRY_DELAY -- Reset delay em caso de sucesso
+                    return HttpService:JSONDecode(response.Body)
+                elseif response and response.StatusCode == 429 then
+                    print("[HOP] ⚠️ Rate limit (429) - Aumentando delay")
+                    currentApiDelay = math.min(currentApiDelay * 2, API_MAX_DELAY)
+                    return nil
+                else
+                    print("[HOP] ⚠️ HTTP Response falhou: " .. tostring(response and response.StatusCode or "nil"))
+                    -- Fallback para game:HttpGet
+                    return HttpService:JSONDecode(game:HttpGet(url))
+                end
+            end)
+            
+            if ok and result and result.data then
+                print("[HOP] ✅ API retornou " .. #result.data .. " servidores")
+                lastServerList = result -- Cache da resposta
+            elseif lastServerList then
+                print("[HOP] ⚠️ Usando cache de servidores anterior")
+                result = lastServerList
+            end
+        end
+        
+        -- Usa lastServerList se disponível
+        local result = lastServerList
+        
+        if result and result.data then
             local now = os.time()
             local currentVisited = getVisitedServers()
             
             -- Limpar antigos
+            local cleanedCount = 0
             for id, ts in pairs(currentVisited) do
-                if now - ts > VISITED_EXPIRY then currentVisited[id] = nil end
+                if now - ts > VISITED_EXPIRY then 
+                    currentVisited[id] = nil 
+                    cleanedCount = cleanedCount + 1
+                end
+            end
+            if cleanedCount > 0 then
+                print("[HOP] 🧹 Limpou " .. cleanedCount .. " servidores antigos da memória")
             end
 
             local availableServers = {}
@@ -594,6 +661,8 @@ local function startInfiniteHop(label)
                     table.insert(availableServers, server)
                 end
             end
+            
+            print("[HOP] 📋 Servidores disponíveis (não visitados): " .. #availableServers)
 
             if #availableServers > 0 then
                 -- SISTEMA DE PRIORIDADE: 6-8 players (range ideal!)
@@ -608,18 +677,23 @@ local function startInfiniteHop(label)
                     end
                 end
                 
+                print("[HOP] 🎯 Servidores prioritários (6-8 players): " .. #priorityServers)
+                print("[HOP] 📊 Servidores normais: " .. #normalServers)
+                
                 local chosen
                 -- 80% de chance de escolher servidor prioritário (6-8 players)
                 if #priorityServers > 0 and math.random() < 0.8 then
                     chosen = priorityServers[math.random(1, #priorityServers)]
-                    print("[HOP] 🎯 Servidor PRIORITÁRIO (6-8 players)!")
+                    print("[HOP] 🎯 Escolheu servidor PRIORITÁRIO!")
                 else
                     table.sort(availableServers, function(a, b) return a.playing < b.playing end)
                     chosen = availableServers[math.random(1, math.min(20, #availableServers))]
+                    print("[HOP] 📊 Escolheu servidor NORMAL (menor população)")
                 end
                 
                 text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "... (" .. chosen.playing .. "/8)"
-                print("[HOP] Tentando: " .. chosen.id .. " | Players: " .. chosen.playing)
+                print("[HOP] 🚀 Tentando teleportar para: " .. chosen.id)
+                print("[HOP] 👥 Players no servidor destino: " .. chosen.playing .. "/" .. chosen.maxPlayers)
                 
                 currentVisited[chosen.id] = os.time()
                 saveVisitedServers(currentVisited)
@@ -630,18 +704,31 @@ local function startInfiniteHop(label)
                 
                 if not teleportSuccess then
                     print("[HOP] ⚠️ Erro no teleporte: " .. tostring(teleportErr))
+                    task.wait(1)
+                else
+                    print("[HOP] ✅ Teleporte iniciado com sucesso!")
+                    task.wait(5)
+                end
+            else
+                print("[HOP] ⏳ Nenhum servidor novo disponível no momento")
+                text.Text = "⏳ Sem servidores novos disponíveis..."
+                
+                -- Se não há servidores novos, limpa a memória e tenta novamente
+                if #result.data > 0 then
+                    print("[HOP] 🔄 Resetando memória de servidores visitados...")
+                    currentVisited = {}
+                    currentVisited[game.JobId] = os.time()
+                    saveVisitedServers(currentVisited)
                 end
                 
-                task.wait(2)
-            else
-                text.Text = "⏳ Sem servidores novos disponíveis..."
-                task.wait(3)
+                task.wait(5)
             end
         else
-            text.Text = "⏳ Erro ao buscar servidores..."
-            task.wait(3)
+            print("[HOP] ⚠️ Aguardando dados da API...")
+            text.Text = "⏳ Aguardando API... (rate limit)"
+            task.wait(currentApiDelay)
         end
-        task.wait(0.5)
+        task.wait(2)
     end
 end
 
