@@ -38,7 +38,7 @@ local RAILWAY_CLIENT = "Bobnotify"
 local TARGET_NAMES   = {""}
 local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Rhino Helicopterino", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skibidi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero", "Kraken"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "Lucky Block", "Los Taco Blocks", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
-local MIN_VALUE        = 35000000
+local MIN_VALUE        = 30000000
 local MIN_VALUE_CARPET = 20000000
 local NOTIFIER_NAME = "bob"
 local CURRENT_JOB   = tostring(game.JobId)
@@ -572,6 +572,53 @@ text.TextColor3 = Color3.new(1, 1, 1)
 text.TextScaled = true
 text.Font = Enum.Font.SourceSansBold
 
+-- SISTEMA DE RESERVA DE SERVIDORES PARA MULTI-CONTA
+local function getSharedServerReservations()
+    local ok, data = pcall(function()
+        if isfile and isfile("server_reservations_shared.json") then
+            local content = readfile("server_reservations_shared.json")
+            return HttpService:JSONDecode(content)
+        end
+        return {}
+    end)
+    return (ok and data) or {}
+end
+
+local function reserveServer(serverId, accountId)
+    local reservations = getSharedServerReservations()
+    local now = os.time()
+    
+    -- Limpa reservas antigas (mais de 2 minutos)
+    for sid, info in pairs(reservations) do
+        if now - (info.timestamp or 0) > 120 then
+            reservations[sid] = nil
+        end
+    end
+    
+    -- Adiciona nova reserva
+    reservations[serverId] = {
+        accountId = accountId,
+        timestamp = now
+    }
+    
+    pcall(function()
+        if writefile then
+            writefile("server_reservations_shared.json", HttpService:JSONEncode(reservations))
+        end
+    end)
+end
+
+local function isServerReserved(serverId, myAccountId)
+    local reservations = getSharedServerReservations()
+    local reservation = reservations[serverId]
+    
+    if not reservation then return false end
+    if reservation.accountId == myAccountId then return false end
+    if os.time() - (reservation.timestamp or 0) < 120 then return true end
+    
+    return false
+end
+
 local function getServerListOnce()
     -- Tenta carregar lista salva primeiro
     local ok, savedList = pcall(function()
@@ -641,23 +688,48 @@ local function startInfiniteHop(label)
     text.Text = "🔄 Hopping..."
     
     while true do
-        -- Filtra servidores não visitados
+        -- Filtra servidores não visitados E não reservados por outras contas
+        local myAccountId = tostring(LocalPlayer.UserId) .. "_" .. tostring(os.clock())
         local available = {}
         for _, server in ipairs(serverList) do
-            if not visitedServers[server.id] and server.id ~= game.JobId and server.playing < server.maxPlayers then
+            local notVisited = not visitedServers[server.id]
+            local notCurrent = server.id ~= game.JobId
+            local hasSpace = server.playing < server.maxPlayers
+            local notReserved = not isServerReserved(server.id, myAccountId)
+            
+            if notVisited and notCurrent and hasSpace and notReserved then
                 table.insert(available, server)
             end
         end
         
-        -- Se visitou todos, reseta
+        print("[HOP] 📊 Servidores LIVRES (sem reserva): " .. #available)
+        
+        -- Se visitou todos ou nenhum disponível, reseta
         if #available == 0 then
-            print("[HOP] 🔄 Visitou todos! Resetando lista...")
+            print("[HOP] 🔄 Sem servidores disponíveis! Resetando...")
             visitedServers = {}
             visitedServers[game.JobId] = true
             
-            -- Atualiza lista também
+            -- Força atualizar lista (ignora cache)
+            pcall(function()
+                if writefile then
+                    writefile("server_list_cache.json", HttpService:JSONEncode({
+                        timestamp = 0, -- Força expirar cache
+                        servers = {}
+                    }))
+                end
+            end)
+            
+            print("[HOP] 🌐 Buscando nova lista da API...")
             serverList = getServerListOnce()
-            task.wait(2)
+            
+            if #serverList == 0 then
+                print("[HOP] ⚠️ Nenhum servidor na API! Aguardando 30s...")
+                task.wait(30)
+            else
+                print("[HOP] ✅ Nova lista com " .. #serverList .. " servidores")
+                task.wait(3)
+            end
             continue
         end
         
@@ -665,8 +737,12 @@ local function startInfiniteHop(label)
         local chosen = available[math.random(1, #available)]
         visitedServers[chosen.id] = true
         
+        -- RESERVA o servidor para outras contas não usarem
+        local myAccountId = tostring(LocalPlayer.UserId) .. "_" .. tostring(os.clock())
+        reserveServer(chosen.id, myAccountId)
+        
         text.Text = "📡 Hopping... (" .. chosen.playing .. "/" .. chosen.maxPlayers .. ")"
-        print("[HOP] 🚀 Hop → " .. chosen.id .. " (" .. chosen.playing .. " players)")
+        print("[HOP] 🚀 Hop → " .. string.sub(chosen.id, 1, 12) .. "... | " .. chosen.playing .. " players [RESERVADO]")
         
         local success, err = pcall(function()
             TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
@@ -674,10 +750,12 @@ local function startInfiniteHop(label)
         
         if success then
             print("[HOP] ✅ Enviado!")
-            task.wait(15)
+            task.wait(15) -- Espera teleporte completar
         else
-            print("[HOP] ⚠️ Falhou: " .. tostring(err))
-            task.wait(2)
+            print("[HOP] ⚠️ Erro: " .. tostring(err))
+            -- Se falhou, marca servidor como problemático e tenta próximo
+            visitedServers[chosen.id] = true
+            task.wait(1) -- Tenta próximo rapidamente
         end
     end
 end
