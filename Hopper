@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════
---   BOB HOPPER V2.4 — BEEP SYNC EDITION
+--   BOB HOPPER V2.4 — BEEP SYNC EDITION (ANY SERVER HOP)
 -- ══════════════════════════════════════════════════════════════
 print("--- BOB NOTIFIER STARTING ---")
 local Players = game:GetService("Players")
@@ -302,257 +302,113 @@ local function scanPlots(duelPlayers, seen, currentJobId)
         if not ok or not pot then continue end
         local ok2, list = pcall(function() return pot:Get("AnimalList") end)
         if not ok2 or type(list) ~= "table" then continue end
-        local syncOwner = nil
-        local ownerOk, ownerVal = pcall(function() return pot:Get("Owner") end)
-        if ownerOk and ownerVal ~= nil then
-            syncOwner = type(ownerVal) == "string" and ownerVal or tostring(ownerVal)
-        end
-        local plotDuel = false
-        if syncOwner and duelPlayers[syncOwner] then plotDuel = true
-        else plotDuel = isPlotOwnerInDuel(plot, duelPlayers) end
-        local ownerName = syncOwner or resolveOwnerName(ownerVal) or "?"
-        local plotItems = {}
-        local plotHasQualifying = false
-        for _, animalData in pairs(list) do
-            if type(animalData) ~= "table" then continue end
-            if isFusing(animalData) then continue end
-            local name = animalData.Index
-            if not name then continue end
-            if not AnimalsData or not AnimalsData[name] then continue end
-            local inDuel = isInDuel(animalData) or plotDuel
-            local data = animalData.Data or animalData
-            local mutation = data.Mutation
-            if type(mutation) ~= "string" or mutation == "" then mutation = nil end
-            local traitsTable = nil
-            local traitsList = {}
-            if type(data.Traits) == "table" then
-                traitsTable = {}
-                if #data.Traits > 0 then
-                    for _, trait in ipairs(data.Traits) do
-                        if type(trait) == "string" then
-                            table.insert(traitsTable, trait)
-                            table.insert(traitsList, trait)
-                        end
-                    end
-                else
-                    for traitName, enabled in pairs(data.Traits) do
-                        if enabled then
-                            table.insert(traitsTable, traitName)
-                            table.insert(traitsList, traitName)
-                        end
-                    end
-                end
-                if #traitsTable == 0 then traitsTable = nil end
+        
+        local plotOwner = getPlotOwner(plot)
+        local ownerName = plotOwner and plotOwner.Name or "Unknown"
+        local inDuel = isPlotOwnerInDuel(plot, duelPlayers)
+        
+        for id, animal in pairs(list) do
+            local name = animal.Name or "Unknown"
+            local val = animal.Value or 0
+            local mut = animal.Mutation or "Default"
+            
+            if shouldScan(name, val) then
+                table.insert(results, {
+                    name = name,
+                    value = val,
+                    mutation = mut,
+                    ownerName = ownerName,
+                    inDuel = inDuel,
+                    gen = formatValue(val)
+                })
             end
-            local ok3, genValue = pcall(function()
-                return AnimalsShared:GetGeneration(name, mutation, traitsTable, nil)
-            end)
-            if not ok3 or type(genValue) ~= "number" then continue end
-            local qualifies = shouldScan(name, genValue)
-            if qualifies then plotHasQualifying = true end
-            local displayName = name
-            local info = AnimalsData[name]
-            if info and info.DisplayName then displayName = info.DisplayName end
-            table.insert(plotItems, {
-                name = displayName, index = name, genValue = genValue,
-                mutation = mutation, traitsList = traitsList,
-                traitCount = traitsTable and #traitsTable or 0,
-                inDuel = inDuel, qualifies = qualifies, ownerName = ownerName,
-            })
-        end
-        if not plotHasQualifying then continue end
-        for _, item in ipairs(plotItems) do
-            if not item.qualifies then continue end
-            local genText = "$" .. formatValue(item.genValue) .. "/s"
-            table.insert(results, {
-                tier = (item.genValue >= 1e9 or isUltra(item.name)) and "ULTRA" or (item.genValue >= 100e6) and "HIGH" or "MID",
-                name = item.name, gen = genText, value = item.genValue,
-                mutation = item.mutation, traits = #item.traitsList > 0 and item.traitsList or nil,
-                inDuel = item.inDuel, ownerName = item.ownerName,
-            })
-            print(string.format("FOUND: %s | Mutation: %s | Traits: %d | Gen: %s", item.name, item.mutation or "None", item.traitCount, genText))
         end
     end
     return results
-end
-
-local function parseObjectText(objectText)
-    if not objectText or objectText == "" then return nil, 0 end
-    local name, valStr = objectText:match("^(.-)%s*%$([%d%.]+[KkMmBbTt]?)%s*$")
-    if name and valStr then
-        name = name:match("^%s*(.-)%s*$")
-        return name, parseValue("$" .. valStr .. "/s")
-    end
-    return objectText:match("^%s*(.-)%s*$"), 0
 end
 
 local function scanCarpet(seen, currentJobId)
     local results = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if not obj:IsA("ProximityPrompt") or not obj.Enabled then continue end
-        if (obj.ActionText or "") ~= "Purchase" then continue end
-        local displayName, genValue = parseObjectText(obj.ObjectText)
-        if not displayName or displayName == "" then continue end
-        if AnimalsData and AnimalsShared and AnimalsData[displayName] then
-            local ok, v = pcall(function() return AnimalsShared:GetGeneration(displayName, nil, nil, nil) end)
-            if ok and type(v) == "number" and v > 0 then genValue = v end
+    local carpets = Workspace:FindFirstChild("Carpets")
+    if not carpets then return results end
+    for _, carpet in ipairs(carpets:GetChildren()) do
+        local ok, pot = pcall(function() return Synchronizer:Get(carpet.Name) end)
+        if not ok or not pot then continue end
+        local ok2, list = pcall(function() return pot:Get("AnimalList") end)
+        if not ok2 or type(list) ~= "table" then continue end
+        
+        local ownerName = carpet:GetAttribute("Owner") or "Unknown"
+        
+        for id, animal in pairs(list) do
+            local name = (animal.Name or "Unknown") .. " (carpet)"
+            local val = animal.Value or 0
+            local mut = animal.Mutation or "Default"
+            
+            if val >= MIN_VALUE_CARPET or isTargeted(animal.Name or "") or isUltra(animal.Name or "") then
+                table.insert(results, {
+                    name = name,
+                    value = val,
+                    mutation = mut,
+                    ownerName = ownerName,
+                    inDuel = false,
+                    gen = formatValue(val)
+                })
+            end
         end
-        if isBlacklisted(displayName) then continue end
-        if not (genValue >= MIN_VALUE_CARPET or isTargeted(displayName) or isUltra(displayName)) then continue end
-        local genText = genValue > 0 and ("$" .. formatValue(genValue) .. "/s") or "?"
-        table.insert(results, {
-            tier = (genValue >= 1e9 or isUltra(displayName)) and "ULTRA" or (genValue >= 100e6) and "HIGH" or "MID",
-            name = displayName .. " (carpet)", gen = genText, value = genValue,
-            mutation = nil, traits = nil, inDuel = false, ownerName = "Carpet", isCarpet = true,
-        })
-        print(string.format("✅ CARPET FOUND: %s | Gen: %s", displayName, genText))
     end
     return results
 end
 
-local function getBrainrotImage(name)
-    local ok, result = pcall(function()
-        local url = "https://stealabrainrot.fandom.com/api.php?action=query&titles="
-                    .. HttpService:UrlEncode(name)
-                    .. "&prop=pageimages&piprop=original&format=json"
-        local resp = http_request({ Url = url, Method = "GET" })
-        if resp and resp.StatusCode == 200 then
-            local data = HttpService:JSONDecode(resp.Body)
-            for _, page in pairs(data.query.pages) do
-                if page.original and page.original.source then return page.original.source end
-            end
-        end
-    end)
-    return ok and result or nil
-end
-
-local function sendWebhook(url, name, value, mutation, allResults, showFields, footer, ownerName, jobId, includeJoinLink, inDuel)
-    if not url or url == "" then return end
-    local imageUrl = getBrainrotImage(name)
-    local joinLink = "https://liphyrdev.github.io/notifier/?placeId=109983668079237&gameInstanceId=" .. (jobId or CURRENT_JOB)
-    local mutEmoji = getMutEmoji(mutation):gsub("%s+$", "")
-    local genText = "$" .. formatValue(value) .. "/s"
+local function sendWebhook(url, name, value, mutation, others, highlight, title, ownerName, jobId, isMain, inDuel)
+    local fields = {
+        { name = "Brainrot", value = getMutEmoji(mutation) .. name, inline = true },
+        { name = "Value", value = formatValue(value), inline = true },
+        { name = "Owner", value = ownerName, inline = true },
+        { name = "JobId", value = "`" .. jobId .. "`", inline = false }
+    }
     
-local notifierType = "Midlights"
-
-for _, r in ipairs(allResults) do
-    if r.name == name then
-        if r.tier == "ULTRA" then
-            notifierType = "Ultralights"
-        elseif r.tier == "HIGH" then
-            notifierType = "Highlights"
-        end
-        break
-    end
-end
-
-    local isKeyWebhook = url == WEBHOOK_MID or url == WEBHOOK_HIGH or url == WEBHOOK_ULTRA
-    local traitsText = ""
-    if type(allResults) == "table" then
-        for _, r in ipairs(allResults) do
-            if r.name == name then
-                if r.traits and #r.traits > 0 then
-                    local emojis = {}
-                    for _, trait in ipairs(r.traits) do table.insert(emojis, TRAIT_EMOJIS[trait] or trait) end
-                    traitsText = table.concat(emojis, " ")
-                end
-                break
-            end
+    local othersStr = ""
+    for i, r in ipairs(others) do
+        if i > 1 then
+            othersStr = othersStr .. string.format("\n• %s %s (%s)", getMutEmoji(r.mutation), r.name, r.gen)
         end
     end
-
-    local otherBrainrots = {}
-    if type(allResults) == "table" then
-        for _, r in ipairs(allResults) do
-            if r.name ~= name then
-                local rMut = getMutEmoji(r.mutation):gsub("%s+$", "")
-                local traitText = ""
-                if r.traits and #r.traits > 0 then
-                    local temp = {}
-                    for _, tr in ipairs(r.traits) do table.insert(temp, TRAIT_EMOJIS[tr] or tr) end
-                    traitText = table.concat(temp, " ")
-                end
-                table.insert(otherBrainrots, string.format("%s・%s%s — %s", rMut, r.name, traitText ~= "" and (" " .. traitText) or "", r.gen))
-            end
-        end
+    if othersStr ~= "" then
+        table.insert(fields, { name = "Outros Itens", value = othersStr, inline = false })
     end
 
-    local footerText = "-# Bob Notifier " .. (inDuel and "| ⚔️ Duel " or "") .. "| <t:" .. os.time() .. ":R> | `Made by Kzzin`" .. (url == WEBHOOK_ULTRA and " | @everyone" or "")
-
-    local components = {{
-        type = 17,
-        components = {
-            { type = 10, content = "## Bob Notifier・" .. notifierType },
-            { type = 14, divider = true, spacing = 1 },
-            { type = 9, accessory = imageUrl and { type = 11, media = { url = imageUrl } } or nil,
-                components = {{ type = 10, content = "# " .. mutEmoji .. "・" .. name .. "\n" .. (traitsText ~= "" and (traitsText .. "\n") or "") .. "### " .. genText }}
-            }
-        }
-    }}
-
-    if #otherBrainrots > 0 then
-        table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
-        table.insert(components[1].components, { type = 10, content = "**Other**\n" .. table.concat(otherBrainrots, "\n") })
-    end
-
-    table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
-    if not isKeyWebhook then
-        table.insert(components[1].components, { type = 10, content = "## <:id2:1502543195488256160> • Job ID\n\n`" .. tostring(jobId or CURRENT_JOB) .. "`" })
-        table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Join!", url = joinLink, emoji = { id = "1502063760024801331" } }} })
+    local footerText = "Bob Notifier — " .. os.date("%X")
+    local components = {{ type = 1, components = {} }}
+    if isMain then
+        table.insert(components[1].components, { type = 2, style = 5, label = "Join Server", url = "https://www.roblox.com/games/" .. PLACE_ID .. "?jobId=" .. jobId, emoji = { id = "1502528698757156924" } })
     else
-        table.insert(components[1].components, { type = 1, components = {{ type = 2, style = 5, label = "Click Here To Buy Your Key!", url = "https://discord.com/channels/1477872742933069846/1477912919441408101", emoji = { id = "1502528698757156924" } }} })
+        table.insert(components[1].components, { type = 2, style = 5, label = "Click Here To Buy Your Key!", url = "https://discord.com/channels/1477872742933069846/1477912919441408101", emoji = { id = "1502528698757156924" } })
     end
-    table.insert(components[1].components, { type = 14, divider = true, spacing = 1 })
-    table.insert(components[1].components, { type = 10, content = footerText })
 
     pcall(function()
         http_request({
             Url = url, Method = "POST", Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode({ username = NOTIFIER_NAME, flags = 32768, components = components })
+            Body = HttpService:JSONEncode({ username = NOTIFIER_NAME, embeds = {{ title = title, fields = fields, footer = { text = footerText }, color = highlight and 0x00ff00 or 0xff0000 }}, components = components })
         })
     end)
 end
 
 local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, currentPlayers, maxPlayers, placeId)
-    local body = HttpService:JSONEncode({
-        brainrot = name, 
-        name = name, 
-        jobId = tostring(jobId or ""),
-        value = tostring(math.floor(value or 0)), 
-        owner = tostring(ownerName or "Unknown"),
-        players = tostring(currentPlayers or "?"),
-        maxPlayers = tostring(maxPlayers or "?"),
-        placeId = tostring(placeId or "109983668079237")
-    })
-    pcall(function()
-        http_request({
-            Url = RAILWAY_API .. "/api/brainrot", Method = "POST",
-            Headers = { ["Content-Type"] = "application/json", ["X-Bob-Client"] = RAILWAY_CLIENT, ["X-Bob-Secret"] = RAILWAY_SECRET },
-            Body = body
-        })
-    end)
+    local body = HttpService:JSONEncode({ brainrot = name, name = name, jobId = tostring(jobId or ""), value = tostring(math.floor(value or 0)), owner = tostring(ownerName or "Unknown"), players = tostring(currentPlayers or "?"), maxPlayers = tostring(maxPlayers or "?"), placeId = tostring(placeId or "109983668079237") })
+    pcall(function() http_request({ Url = RAILWAY_API .. "/api/brainrot", Method = "POST", Headers = { ["Content-Type"] = "application/json", ["X-Bob-Client"] = RAILWAY_CLIENT, ["X-Bob-Secret"] = RAILWAY_SECRET }, Body = body }) end)
 end
 
-local VISITED_EXPIRY = 3600 -- 1 hora de memória
+local VISITED_EXPIRY = 3600
 math.randomseed(os.clock() * 1000000)
 
 local function getVisitedServers()
-    local ok, content = pcall(function()
-        if isfile and isfile("visited_servers.json") then
-            return readfile("visited_servers.json")
-        end
-        return "{}"
-    end)
+    local ok, content = pcall(function() if isfile and isfile("visited_servers.json") then return readfile("visited_servers.json") end return "{}" end)
     local success, data = pcall(function() return HttpService:JSONDecode(ok and content or "{}") end)
     return success and data or {}
 end
 
 local function saveVisitedServers(data)
-    pcall(function()
-        if writefile then
-            writefile("visited_servers.json", HttpService:JSONEncode(data))
-        end
-    end)
+    pcall(function() if writefile then writefile("visited_servers.json", HttpService:JSONEncode(data)) end end)
 end
 
 local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
@@ -568,8 +424,9 @@ text.TextColor3 = Color3.new(1, 1, 1)
 text.TextScaled = true
 text.Font = Enum.Font.SourceSansBold
 
+-- HOP PARA QUALQUER SERVIDOR (SEM PRIORIDADES)
 local function startInfiniteHop(label)
-    print("[HOP] Iniciando...")
+    print("[HOP] Iniciando varredura sequencial para QUALQUER servidor...")
     if not game:IsLoaded() then game.Loaded:Wait() end
     task.wait(1)
     
@@ -583,63 +440,37 @@ local function startInfiniteHop(label)
             local now = os.time()
             local currentVisited = getVisitedServers()
             
-            -- Limpar antigos
-            for id, ts in pairs(currentVisited) do
-                if now - ts > VISITED_EXPIRY then currentVisited[id] = nil end
-            end
+            for id, ts in pairs(currentVisited) do if now - ts > VISITED_EXPIRY then currentVisited[id] = nil end end
 
-            local availableServers = {}
+            local targetServers = {}
             for _, server in ipairs(result.data) do
                 if server.id ~= game.JobId and not currentVisited[server.id] and server.playing < server.maxPlayers then
-                    table.insert(availableServers, server)
+                    table.insert(targetServers, server)
                 end
             end
 
-            if #availableServers > 0 then
-                -- SISTEMA DE PRIORIDADE: 6-8 players (range ideal!)
-                local priorityServers = {}
-                local normalServers = {}
-                
-                for _, server in ipairs(availableServers) do
-                    if server.playing >= 6 and server.playing <= 8 then
-                        table.insert(priorityServers, server)
-                    else
-                        table.insert(normalServers, server)
-                    end
+            -- Embaralha a lista para aleatoriedade
+            local shuffled = {}
+            while #targetServers > 0 do table.insert(shuffled, table.remove(targetServers, math.random(1, #targetServers))) end
+
+            if #shuffled > 0 then
+                for _, chosen in ipairs(shuffled) do
+                    text.Text = "🚀 Tentando server: " .. chosen.playing .. " players (" .. string.sub(chosen.id, 1, 5) .. ")"
+                    print("[HOP] Tentando entrar: " .. chosen.id .. " | Players: " .. chosen.playing)
+                    
+                    currentVisited[chosen.id] = os.time()
+                    saveVisitedServers(currentVisited)
+                    
+                    local teleportSuccess, teleportErr = pcall(function() TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer) end)
+                    if teleportSuccess then task.wait(5) else print("[HOP] Erro: " .. tostring(teleportErr)); task.wait(0.5) end
                 end
-                
-                local chosen
-                -- 80% de chance de escolher servidor prioritário (6-8 players)
-                if #priorityServers > 0 and math.random() < 0.8 then
-                    chosen = priorityServers[math.random(1, #priorityServers)]
-                    print("[HOP] 🎯 Servidor PRIORITÁRIO (6-8 players)!")
-                else
-                    table.sort(availableServers, function(a, b) return a.playing < b.playing end)
-                    chosen = availableServers[math.random(1, math.min(20, #availableServers))]
-                end
-                
-                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "... (" .. chosen.playing .. "/8)"
-                print("[HOP] Tentando: " .. chosen.id .. " | Players: " .. chosen.playing)
-                
-                currentVisited[chosen.id] = os.time()
-                saveVisitedServers(currentVisited)
-                
-                local teleportSuccess, teleportErr = pcall(function()
-                    TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
-                end)
-                
-                if not teleportSuccess then
-                    print("[HOP] ⚠️ Erro no teleporte: " .. tostring(teleportErr))
-                end
-                
-                task.wait(2)
             else
-                text.Text = "⏳ Sem servidores novos disponíveis..."
-                task.wait(3)
+                text.Text = "⏳ Nenhum servidor disponível no momento. Aguardando..."
+                task.wait(10)
             end
         else
             text.Text = "⏳ Erro ao buscar servidores..."
-            task.wait(3)
+            task.wait(5)
         end
         task.wait(0.5)
     end
@@ -664,45 +495,24 @@ if Synchronizer then
 
     if type(results) == "table" and #results > 0 then
         found = true
-        
-        -- SISTEMA DE PRIORIDADE BOB (ULTRA > VALUE)
-        -- Primeiro, tentamos encontrar o melhor item ULTRA na lista
         local bestUltra = nil
         for _, r in ipairs(results) do
             local rNameClean = r.name:gsub("%s*%(carpet%)%s*$", ""):lower()
             local isRUltra = false
-            for _, u in ipairs(ULTRA_BRAINROTS) do 
-                if u ~= "" and rNameClean == u:lower() then isRUltra = true; break end 
-            end
-            
-            if isRUltra then
-                if not bestUltra or r.value > bestUltra.value then
-                    bestUltra = r
-                end
-            end
+            for _, u in ipairs(ULTRA_BRAINROTS) do if u ~= "" and rNameClean == u:lower() then isRUltra = true; break end end
+            if isRUltra then if not bestUltra or r.value > bestUltra.value then bestUltra = r end end
         end
-
-        -- Ordena por valor para a lista "Other"
         table.sort(results, function(a, b) return a.value > b.value end)
-        
-        -- O destaque (best) será o melhor ULTRA, ou se não houver ultra, o de maior valor
         local best = bestUltra or results[1]
         
         if best then
             sendWebhook(WEBHOOK_URL, best.name, best.value, best.mutation, results, true, "Bob Notify", best.ownerName, detectedJobId, true, best.inDuel)
-            
             local isUltraName = false
             local bestNameClean = best.name:gsub("%s*%(carpet%)%s*$", ""):lower()
             for _, u in ipairs(ULTRA_BRAINROTS) do if u ~= "" and bestNameClean == u:lower() then isUltraName = true; break end end
-            
-            if best.value >= 1e9 or isUltraName then 
-                sendWebhook(WEBHOOK_ULTRA, best.name, best.value, best.mutation, results, false, "Ultra", best.ownerName, detectedJobId, false, best.inDuel)
-            elseif best.value >= 100e6 then 
-                sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
-            else 
-                sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) 
-            end
-            
+            if best.value >= 1e9 or isUltraName then sendWebhook(WEBHOOK_ULTRA, best.name, best.value, best.mutation, results, false, "Ultra", best.ownerName, detectedJobId, false, best.inDuel)
+            elseif best.value >= 100e6 then sendWebhook(WEBHOOK_HIGH, best.name, best.value, best.mutation, results, false, "High", best.ownerName, detectedJobId, false, best.inDuel)
+            else sendWebhook(WEBHOOK_MID, best.name, best.value, best.mutation, results, false, "Mid", best.ownerName, detectedJobId, false, best.inDuel) end
             sendToRailwayAPI(best.name, detectedJobId, best.gen, best.value, getUserKey(), best.ownerName, #Players:GetPlayers(), Players.MaxPlayers, PLACE_ID)
             print("✅ Sucesso:", best.name, "| Owner:", best.ownerName, "|", best.gen)
             startInfiniteHop(best.name)
