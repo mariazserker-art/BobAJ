@@ -534,8 +534,8 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
 end
 
 local VISITED_EXPIRY = 3600 -- 1 hora de memória
-local API_RETRY_DELAY = 10 -- Delay inicial entre requisições (segundos)
-local API_MAX_DELAY = 60 -- Delay máximo
+local API_RETRY_DELAY = 30 -- Delay inicial maior para evitar rate limit (30s)
+local API_MAX_DELAY = 90 -- Delay máximo aumentado
 local currentApiDelay = API_RETRY_DELAY
 
 math.randomseed(os.clock() * 1000000)
@@ -586,58 +586,64 @@ local function startInfiniteHop(label)
     saveVisitedServers(visited)
     print("[HOP] Servidor atual marcado como visitado")
     
-    local lastServerList = nil
-    local lastApiCall = 0
+    local cachedServerList = nil
+    local cacheTime = 0
+    local CACHE_DURATION = 300 -- 5 minutos - só busca API novamente depois desse tempo
 
     while true do
         local now = os.time()
-        local timeSinceLastCall = now - lastApiCall
+        local needsRefresh = (cachedServerList == nil) or (now - cacheTime > CACHE_DURATION)
         
-        -- Só faz nova requisição se passou tempo suficiente
-        if timeSinceLastCall < currentApiDelay and lastServerList ~= nil then
-            print("[HOP] ⏰ Aguardando " .. (currentApiDelay - timeSinceLastCall) .. "s antes da próxima chamada API (rate limit)")
-            task.wait(2)
-            -- Continua o loop sem fazer nova requisição
-        else
-            print("[HOP] 🌐 Buscando servidores disponíveis...")
-            lastApiCall = now
+        -- SÓ BUSCA API SE REALMENTE NECESSÁRIO
+        if needsRefresh then
+            print("[HOP] 🔄 Buscando lista de servidores da API...")
             
             local ok, result = pcall(function()
                 local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
-                print("[HOP] 📡 Chamando API... (delay atual: " .. currentApiDelay .. "s)")
                 
-                -- Tenta com http_request primeiro
                 local response = http_request({
                     Url = url,
                     Method = "GET"
                 })
                 
                 if response and response.StatusCode == 200 then
-                    print("[HOP] ✅ HTTP Response: " .. response.StatusCode)
-                    currentApiDelay = API_RETRY_DELAY -- Reset delay em caso de sucesso
+                    print("[HOP] ✅ HTTP Response: 200 - Lista obtida!")
                     return HttpService:JSONDecode(response.Body)
                 elseif response and response.StatusCode == 429 then
-                    print("[HOP] ⚠️ Rate limit (429) - Aumentando delay")
-                    currentApiDelay = math.min(currentApiDelay * 2, API_MAX_DELAY)
+                    print("[HOP] ⚠️ Rate limit (429)")
+                    return nil
+                elseif response and response.StatusCode == 500 then
+                    print("[HOP] ⚠️ Servidor API com erro (500)")
                     return nil
                 else
-                    print("[HOP] ⚠️ HTTP Response falhou: " .. tostring(response and response.StatusCode or "nil"))
+                    print("[HOP] ⚠️ HTTP falhou: " .. tostring(response and response.StatusCode or "nil") .. " - Tentando fallback...")
                     -- Fallback para game:HttpGet
-                    return HttpService:JSONDecode(game:HttpGet(url))
+                    local data = game:HttpGet(url)
+                    return HttpService:JSONDecode(data)
                 end
             end)
             
             if ok and result and result.data then
-                print("[HOP] ✅ API retornou " .. #result.data .. " servidores")
-                lastServerList = result -- Cache da resposta
-            elseif lastServerList then
-                print("[HOP] ⚠️ Usando cache de servidores anterior")
-                result = lastServerList
+                cachedServerList = result
+                cacheTime = now
+                print("[HOP] 💾 Cache atualizado com " .. #result.data .. " servidores")
+            elseif cachedServerList then
+                print("[HOP] 📦 API falhou, continuando com cache antigo")
+                -- Não reseta cache, continua usando o antigo
+            else
+                print("[HOP] ❌ Sem cache disponível, aguardando 30s...")
+                task.wait(30)
+                continue
+            end
+        else
+            local timeLeft = CACHE_DURATION - (now - cacheTime)
+            if timeLeft > 60 then
+                print("[HOP] 💾 Cache ativo (" .. math.floor(timeLeft / 60) .. "min restantes)")
             end
         end
         
-        -- Usa lastServerList se disponível
-        local result = lastServerList
+        -- USA O CACHE PARA FAZER HOP (SEM CHAMAR API!)
+        local result = cachedServerList
         
         if result and result.data then
             local now = os.time()
@@ -662,38 +668,14 @@ local function startInfiniteHop(label)
                 end
             end
             
-            print("[HOP] 📋 Servidores disponíveis (não visitados): " .. #availableServers)
+            print("[HOP] 📋 Servidores disponíveis: " .. #availableServers)
 
             if #availableServers > 0 then
-                -- SISTEMA DE PRIORIDADE: 6-8 players (range ideal!)
-                local priorityServers = {}
-                local normalServers = {}
+                -- ESCOLHE UM SERVIDOR ALEATÓRIO SIMPLES
+                local chosen = availableServers[math.random(1, #availableServers)]
                 
-                for _, server in ipairs(availableServers) do
-                    if server.playing >= 6 and server.playing <= 8 then
-                        table.insert(priorityServers, server)
-                    else
-                        table.insert(normalServers, server)
-                    end
-                end
-                
-                print("[HOP] 🎯 Servidores prioritários (6-8 players): " .. #priorityServers)
-                print("[HOP] 📊 Servidores normais: " .. #normalServers)
-                
-                local chosen
-                -- 80% de chance de escolher servidor prioritário (6-8 players)
-                if #priorityServers > 0 and math.random() < 0.8 then
-                    chosen = priorityServers[math.random(1, #priorityServers)]
-                    print("[HOP] 🎯 Escolheu servidor PRIORITÁRIO!")
-                else
-                    table.sort(availableServers, function(a, b) return a.playing < b.playing end)
-                    chosen = availableServers[math.random(1, math.min(20, #availableServers))]
-                    print("[HOP] 📊 Escolheu servidor NORMAL (menor população)")
-                end
-                
-                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "... (" .. chosen.playing .. "/8)"
-                print("[HOP] 🚀 Tentando teleportar para: " .. chosen.id)
-                print("[HOP] 👥 Players no servidor destino: " .. chosen.playing .. "/" .. chosen.maxPlayers)
+                text.Text = "📡 " .. label .. " - Hopping... (" .. chosen.playing .. "/" .. chosen.maxPlayers .. ")"
+                print("[HOP] 🚀 Teleportando para: " .. chosen.id .. " | Players: " .. chosen.playing .. "/" .. chosen.maxPlayers)
                 
                 currentVisited[chosen.id] = os.time()
                 saveVisitedServers(currentVisited)
@@ -703,32 +685,36 @@ local function startInfiniteHop(label)
                 end)
                 
                 if not teleportSuccess then
-                    print("[HOP] ⚠️ Erro no teleporte: " .. tostring(teleportErr))
-                    task.wait(1)
+                    print("[HOP] ⚠️ Falhou: " .. tostring(teleportErr))
+                    -- Tenta novamente com método alternativo
+                    local altSuccess = pcall(function()
+                        TeleportService:Teleport(PLACE_ID, LocalPlayer)
+                    end)
+                    if altSuccess then
+                        print("[HOP] 🔄 Teleporte alternativo enviado (servidor aleatório)")
+                        task.wait(10)
+                    else
+                        task.wait(0.5)
+                    end
                 else
-                    print("[HOP] ✅ Teleporte iniciado com sucesso!")
-                    task.wait(5)
+                    print("[HOP] ✅ Teleporte OK!")
+                    task.wait(10)
                 end
             else
-                print("[HOP] ⏳ Nenhum servidor novo disponível no momento")
+                print("[HOP] ⏳ Sem servidores disponíveis no cache")
                 text.Text = "⏳ Sem servidores novos disponíveis..."
                 
-                -- Se não há servidores novos, limpa a memória e tenta novamente
-                if #result.data > 0 then
-                    print("[HOP] 🔄 Resetando memória de servidores visitados...")
-                    currentVisited = {}
-                    currentVisited[game.JobId] = os.time()
-                    saveVisitedServers(currentVisited)
-                end
-                
-                task.wait(5)
+                -- Força renovação do cache
+                cachedServerList = nil
+                task.wait(2)
             end
         else
-            print("[HOP] ⚠️ Aguardando dados da API...")
-            text.Text = "⏳ Aguardando API... (rate limit)"
-            task.wait(currentApiDelay)
+            print("[HOP] ⚠️ Cache vazio, forçando renovação...")
+            cachedServerList = nil
+            task.wait(5)
         end
-        task.wait(2)
+        
+        task.wait(1)
     end
 end
 
