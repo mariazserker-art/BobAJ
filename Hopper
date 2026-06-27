@@ -573,148 +573,31 @@ text.TextScaled = true
 text.Font = Enum.Font.SourceSansBold
 
 local function startInfiniteHop(label)
-    print("[HOP] Iniciando sistema de hop infinito...")
+    print("[HOP] 🚀 Sistema de hop infinito SIMPLES iniciado!")
     print("[HOP] Label: " .. tostring(label))
-    print("[HOP] PlaceID: " .. tostring(PLACE_ID))
-    print("[HOP] Current JobId: " .. tostring(game.JobId))
     
     if not game:IsLoaded() then game.Loaded:Wait() end
-    task.wait(1)
+    task.wait(2)
     
-    local visited = getVisitedServers()
-    visited[game.JobId] = os.time()
-    saveVisitedServers(visited)
-    print("[HOP] Servidor atual marcado como visitado")
+    text.Text = "🔄 Hopping..."
     
-    local cachedServerList = nil
-    local cacheTime = 0
-    local CACHE_DURATION = 300 -- 5 minutos - só busca API novamente depois desse tempo
-
     while true do
-        local now = os.time()
-        local needsRefresh = (cachedServerList == nil) or (now - cacheTime > CACHE_DURATION)
+        print("[HOP] 🎲 Dando hop para servidor aleatório...")
         
-        -- SÓ BUSCA API SE REALMENTE NECESSÁRIO
-        if needsRefresh then
-            print("[HOP] 🔄 Buscando lista de servidores da API...")
-            
-            local ok, result = pcall(function()
-                local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
-                
-                local response = http_request({
-                    Url = url,
-                    Method = "GET"
-                })
-                
-                if response and response.StatusCode == 200 then
-                    print("[HOP] ✅ HTTP Response: 200 - Lista obtida!")
-                    return HttpService:JSONDecode(response.Body)
-                elseif response and response.StatusCode == 429 then
-                    print("[HOP] ⚠️ Rate limit (429)")
-                    return nil
-                elseif response and response.StatusCode == 500 then
-                    print("[HOP] ⚠️ Servidor API com erro (500)")
-                    return nil
-                else
-                    print("[HOP] ⚠️ HTTP falhou: " .. tostring(response and response.StatusCode or "nil") .. " - Tentando fallback...")
-                    -- Fallback para game:HttpGet
-                    local data = game:HttpGet(url)
-                    return HttpService:JSONDecode(data)
-                end
-            end)
-            
-            if ok and result and result.data then
-                cachedServerList = result
-                cacheTime = now
-                print("[HOP] 💾 Cache atualizado com " .. #result.data .. " servidores")
-            elseif cachedServerList then
-                print("[HOP] 📦 API falhou, continuando com cache antigo")
-                -- Não reseta cache, continua usando o antigo
-            else
-                print("[HOP] ❌ Sem cache disponível, aguardando 30s...")
-                task.wait(30)
-                continue
-            end
+        local success, err = pcall(function()
+            -- USA TELEPORT SIMPLES - Roblox escolhe o servidor automaticamente
+            TeleportService:Teleport(PLACE_ID, LocalPlayer)
+        end)
+        
+        if success then
+            print("[HOP] ✅ Hop enviado com sucesso!")
+            text.Text = "✅ Teleporting..."
+            task.wait(15) -- Aguarda carregar novo servidor
         else
-            local timeLeft = CACHE_DURATION - (now - cacheTime)
-            if timeLeft > 60 then
-                print("[HOP] 💾 Cache ativo (" .. math.floor(timeLeft / 60) .. "min restantes)")
-            end
+            print("[HOP] ⚠️ Erro: " .. tostring(err))
+            text.Text = "⚠️ Retry in 5s..."
+            task.wait(5) -- Espera um pouco e tenta de novo
         end
-        
-        -- USA O CACHE PARA FAZER HOP (SEM CHAMAR API!)
-        local result = cachedServerList
-        
-        if result and result.data then
-            local now = os.time()
-            local currentVisited = getVisitedServers()
-            
-            -- Limpar antigos
-            local cleanedCount = 0
-            for id, ts in pairs(currentVisited) do
-                if now - ts > VISITED_EXPIRY then 
-                    currentVisited[id] = nil 
-                    cleanedCount = cleanedCount + 1
-                end
-            end
-            if cleanedCount > 0 then
-                print("[HOP] 🧹 Limpou " .. cleanedCount .. " servidores antigos da memória")
-            end
-
-            local availableServers = {}
-            for _, server in ipairs(result.data) do
-                if server.id ~= game.JobId and not currentVisited[server.id] and server.playing < server.maxPlayers then
-                    table.insert(availableServers, server)
-                end
-            end
-            
-            print("[HOP] 📋 Servidores disponíveis: " .. #availableServers)
-
-            if #availableServers > 0 then
-                -- ESCOLHE UM SERVIDOR ALEATÓRIO SIMPLES
-                local chosen = availableServers[math.random(1, #availableServers)]
-                
-                text.Text = "📡 " .. label .. " - Hopping... (" .. chosen.playing .. "/" .. chosen.maxPlayers .. ")"
-                print("[HOP] 🚀 Teleportando para: " .. chosen.id .. " | Players: " .. chosen.playing .. "/" .. chosen.maxPlayers)
-                
-                currentVisited[chosen.id] = os.time()
-                saveVisitedServers(currentVisited)
-                
-                local teleportSuccess, teleportErr = pcall(function()
-                    TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
-                end)
-                
-                if not teleportSuccess then
-                    print("[HOP] ⚠️ Falhou: " .. tostring(teleportErr))
-                    -- Tenta novamente com método alternativo
-                    local altSuccess = pcall(function()
-                        TeleportService:Teleport(PLACE_ID, LocalPlayer)
-                    end)
-                    if altSuccess then
-                        print("[HOP] 🔄 Teleporte alternativo enviado (servidor aleatório)")
-                        task.wait(10)
-                    else
-                        task.wait(0.5)
-                    end
-                else
-                    print("[HOP] ✅ Teleporte OK!")
-                    task.wait(10)
-                end
-            else
-                print("[HOP] ⏳ Sem servidores disponíveis no cache")
-                text.Text = "⏳ Sem servidores novos disponíveis..."
-                
-                -- Força renovação do cache
-                cachedServerList = nil
-                task.wait(2)
-            end
-        else
-            print("[HOP] ⚠️ Cache vazio, forçando renovação...")
-            cachedServerList = nil
-            task.wait(5)
-        end
-        
-        task.wait(1)
     end
 end
 
