@@ -38,8 +38,8 @@ local RAILWAY_CLIENT = "Bobnotify"
 local TARGET_NAMES   = {""}
 local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Rhino Helicopterino", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skibidi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero", "Kraken"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "Lucky Block", "Los Taco Blocks", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
-local MIN_VALUE        = 40000000
-local MIN_VALUE_CARPET = 40000000
+local MIN_VALUE        = 20000000
+local MIN_VALUE_CARPET = 20000000
 local NOTIFIER_NAME = "bob"
 local CURRENT_JOB   = tostring(game.JobId)
 local PLACE_ID      = game.PlaceId
@@ -572,31 +572,112 @@ text.TextColor3 = Color3.new(1, 1, 1)
 text.TextScaled = true
 text.Font = Enum.Font.SourceSansBold
 
+local function getServerListOnce()
+    -- Tenta carregar lista salva primeiro
+    local ok, savedList = pcall(function()
+        if isfile and isfile("server_list_cache.json") then
+            local content = readfile("server_list_cache.json")
+            local data = HttpService:JSONDecode(content)
+            -- Verifica se tem menos de 30 minutos
+            if os.time() - (data.timestamp or 0) < 1800 then
+                print("[HOP] 📦 Usando lista salva em arquivo")
+                return data.servers
+            end
+        end
+        return nil
+    end)
+    
+    if ok and savedList then return savedList end
+    
+    -- Se não tem salva, busca da API UMA VEZ
+    print("[HOP] 🌐 Buscando lista de servidores (uma vez)...")
+    local success, result = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+        local response = http_request({ Url = url, Method = "GET" })
+        
+        if response and response.StatusCode == 200 then
+            local data = HttpService:JSONDecode(response.Body)
+            -- Salva em arquivo
+            pcall(function()
+                if writefile then
+                    writefile("server_list_cache.json", HttpService:JSONEncode({
+                        timestamp = os.time(),
+                        servers = data.data
+                    }))
+                end
+            end)
+            print("[HOP] ✅ Lista obtida e salva!")
+            return data.data
+        else
+            print("[HOP] ⚠️ Falhou, tentando fallback...")
+            local data = HttpService:JSONDecode(game:HttpGet(url))
+            return data.data
+        end
+    end)
+    
+    if success and result then return result end
+    return {}
+end
+
 local function startInfiniteHop(label)
-    print("[HOP] 🚀 Sistema de hop infinito SIMPLES iniciado!")
+    print("[HOP] 🚀 Sistema de hop infinito iniciado!")
     print("[HOP] Label: " .. tostring(label))
     
     if not game:IsLoaded() then game.Loaded:Wait() end
     task.wait(2)
     
+    -- Busca lista UMA VEZ no início
+    local serverList = getServerListOnce()
+    print("[HOP] � Total de servidores na lista: " .. #serverList)
+    
+    if #serverList == 0 then
+        print("[HOP] ❌ Sem servidores disponíveis!")
+        return
+    end
+    
+    local visitedServers = {}
+    visitedServers[game.JobId] = true
+    
     text.Text = "🔄 Hopping..."
     
     while true do
-        print("[HOP] 🎲 Dando hop para servidor aleatório...")
+        -- Filtra servidores não visitados
+        local available = {}
+        for _, server in ipairs(serverList) do
+            if not visitedServers[server.id] and server.id ~= game.JobId and server.playing < server.maxPlayers then
+                table.insert(available, server)
+            end
+        end
+        
+        -- Se visitou todos, reseta
+        if #available == 0 then
+            print("[HOP] 🔄 Visitou todos! Resetando lista...")
+            visitedServers = {}
+            visitedServers[game.JobId] = true
+            
+            -- Atualiza lista também
+            serverList = getServerListOnce()
+            task.wait(2)
+            continue
+        end
+        
+        -- Escolhe servidor aleatório
+        local chosen = available[math.random(1, #available)]
+        visitedServers[chosen.id] = true
+        
+        text.Text = "📡 Hopping... (" .. chosen.playing .. "/" .. chosen.maxPlayers .. ")"
+        print("[HOP] 🚀 Hop → " .. chosen.id .. " (" .. chosen.playing .. " players)")
         
         local success, err = pcall(function()
-            -- USA TELEPORT SIMPLES - Roblox escolhe o servidor automaticamente
-            TeleportService:Teleport(PLACE_ID, LocalPlayer)
+            TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
         end)
         
         if success then
-            print("[HOP] ✅ Hop enviado com sucesso!")
-            text.Text = "✅ Teleporting..."
-            task.wait(15) -- Aguarda carregar novo servidor
+            print("[HOP] ✅ Enviado!")
+            task.wait(15)
         else
-            print("[HOP] ⚠️ Erro: " .. tostring(err))
-            text.Text = "⚠️ Retry in 5s..."
-            task.wait(5) -- Espera um pouco e tenta de novo
+            print("[HOP] ⚠️ Falhou: " .. tostring(err))
+            task.wait(2)
         end
     end
 end
