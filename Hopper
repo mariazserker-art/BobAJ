@@ -38,8 +38,8 @@ local RAILWAY_CLIENT = "Bobnotify"
 local TARGET_NAMES   = {""}
 local ULTRA_BRAINROTS = {"Dragon Cannelloni", "Cerberus", "Centrucci Nuclucci", "Rhino Helicopterino", "La Casa Boo", "Ganganzelli Trulala", "Strawberry Elephant", "Headless Horseman", "Skibidi Toilet", "Meowl", "Griffin", "Dragon Gingerini", "Hydra Dragon Cannelloni", "Ice Dragon", "Love Love Bear", "Digi Narwhal", "La Supreme Combinasion", "Hydra Bunny", "Bunny and Eggy", "Rosey and Teddy", "Cooki and Milki", "Arcadragon", "Ketupat Bros", "Reinito Sleghito", "Fortunu and Cashuru", "Los Amigos", "Pancake and Syrup", "Foxini Larternini", "Kalika Bros", "Los Sekolahs", "Signore Carapace", "Fragrama and Chocrama", "Cash or Card", "La Casa Boo", "La Food Combinasion", "Elefanto Frigo", "Spooky and Pumpky", "Boppin Bunny", "Ginger Gerat", "Los Chillis", "Sammyni Fattini", "Los Spaghettis", "Festive 67", "Quackini Snackini", "Antonio", "Hopilikalika Hopilikalako", "Fishino Clownino", "Jolly Jolly Sahur", "Tirilikaliko Tirilikalako", "Lovin Rose", "Fragola La La La", "Los Tacoritas", "Dragon Aquanini", "Tirilikalika Tirilikalako", "Jelly Moby", "Duggy Bros", "Sammyni Cakini", "Los Hackers", "Rubrikiko", "Rico Dinero", "Money Money Bros", "Dug Dug Dug", "Globa Steppa", "Caramelo Filtrello", "Gorilo Subwoofero", "Kraken"}
 local BLACK_NAMES    = {"Fishboard", "Chicleteira Bicicleteira", "Lucky Block", "Los Taco Blocks", "To to to Sahur", "Graipuss Medussi", "Bunny Bunny Bunny Sahur", "Serafinna Medusella", "Chicleteirina Bicicleteirina", "Santa Hotspot", "Cupid Hotspot", "Los Quesadillas", "Naughty Naughty", "Flancito", "Capitano Gullini", "La Vacca Lepre Lepreino", "Quesadilla Crocodilla", "Easter Easter Easter Sahur", "Bombardiro Vaccariro", "Burrito Bandito", "Los Nooo My Hotspotsitos"}
-local MIN_VALUE        = 25000000
-local MIN_VALUE_CARPET = 25000000
+local MIN_VALUE        = 20000000
+local MIN_VALUE_CARPET = 20000000
 local NOTIFIER_NAME = "bob"
 local CURRENT_JOB   = tostring(game.JobId)
 local PLACE_ID      = game.PlaceId
@@ -534,6 +534,10 @@ local function sendToRailwayAPI(name, jobId, genText, value, key, ownerName, cur
 end
 
 local VISITED_EXPIRY = 3600 -- 1 hora de memória
+local API_RETRY_DELAY = 30 -- Delay inicial maior para evitar rate limit (30s)
+local API_MAX_DELAY = 90 -- Delay máximo aumentado
+local currentApiDelay = API_RETRY_DELAY
+
 math.randomseed(os.clock() * 1000000)
 
 local function getVisitedServers()
@@ -568,80 +572,191 @@ text.TextColor3 = Color3.new(1, 1, 1)
 text.TextScaled = true
 text.Font = Enum.Font.SourceSansBold
 
-local function startInfiniteHop(label)
-    print("[HOP] Iniciando...")
-    if not game:IsLoaded() then game.Loaded:Wait() end
-    task.wait(1)
+-- SISTEMA DE RESERVA DE SERVIDORES PARA MULTI-CONTA
+local function getSharedServerReservations()
+    local ok, data = pcall(function()
+        if isfile and isfile("server_reservations_shared.json") then
+            local content = readfile("server_reservations_shared.json")
+            return HttpService:JSONDecode(content)
+        end
+        return {}
+    end)
+    return (ok and data) or {}
+end
+
+local function reserveServer(serverId, accountId)
+    local reservations = getSharedServerReservations()
+    local now = os.time()
     
-    local visited = getVisitedServers()
-    visited[game.JobId] = os.time()
-    saveVisitedServers(visited)
+    -- Limpa reservas antigas (mais de 2 minutos)
+    for sid, info in pairs(reservations) do
+        if now - (info.timestamp or 0) > 120 then
+            reservations[sid] = nil
+        end
+    end
+    
+    -- Adiciona nova reserva
+    reservations[serverId] = {
+        accountId = accountId,
+        timestamp = now
+    }
+    
+    pcall(function()
+        if writefile then
+            writefile("server_reservations_shared.json", HttpService:JSONEncode(reservations))
+        end
+    end)
+end
 
+local function isServerReserved(serverId, myAccountId)
+    local reservations = getSharedServerReservations()
+    local reservation = reservations[serverId]
+    
+    if not reservation then return false end
+    if reservation.accountId == myAccountId then return false end
+    if os.time() - (reservation.timestamp or 0) < 120 then return true end
+    
+    return false
+end
+
+local function getServerListOnce()
+    -- Tenta carregar lista salva primeiro
+    local ok, savedList = pcall(function()
+        if isfile and isfile("server_list_cache.json") then
+            local content = readfile("server_list_cache.json")
+            local data = HttpService:JSONDecode(content)
+            -- Verifica se tem menos de 30 minutos
+            if os.time() - (data.timestamp or 0) < 1800 then
+                print("[HOP] 📦 Usando lista salva em arquivo")
+                return data.servers
+            end
+        end
+        return nil
+    end)
+    
+    if ok and savedList then return savedList end
+    
+    -- Se não tem salva, busca da API UMA VEZ
+    print("[HOP] 🌐 Buscando lista de servidores (uma vez)...")
+    local success, result = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+        local response = http_request({ Url = url, Method = "GET" })
+        
+        if response and response.StatusCode == 200 then
+            local data = HttpService:JSONDecode(response.Body)
+            -- Salva em arquivo
+            pcall(function()
+                if writefile then
+                    writefile("server_list_cache.json", HttpService:JSONEncode({
+                        timestamp = os.time(),
+                        servers = data.data
+                    }))
+                end
+            end)
+            print("[HOP] ✅ Lista obtida e salva!")
+            return data.data
+        else
+            print("[HOP] ⚠️ Falhou, tentando fallback...")
+            local data = HttpService:JSONDecode(game:HttpGet(url))
+            return data.data
+        end
+    end)
+    
+    if success and result then return result end
+    return {}
+end
+
+local function startInfiniteHop(label)
+    print("[HOP] 🚀 Sistema de hop infinito iniciado!")
+    print("[HOP] Label: " .. tostring(label))
+    
+    if not game:IsLoaded() then game.Loaded:Wait() end
+    task.wait(2)
+    
+    -- Busca lista UMA VEZ no início
+    local serverList = getServerListOnce()
+    print("[HOP] � Total de servidores na lista: " .. #serverList)
+    
+    if #serverList == 0 then
+        print("[HOP] ❌ Sem servidores disponíveis!")
+        return
+    end
+    
+    local visitedServers = {}
+    visitedServers[game.JobId] = true
+    
+    text.Text = "🔄 Hopping..."
+    
     while true do
-        local ok, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100")) end)
-        if ok and result and result.data then
-            local now = os.time()
-            local currentVisited = getVisitedServers()
+        -- Filtra servidores não visitados E não reservados por outras contas
+        local myAccountId = tostring(LocalPlayer.UserId) .. "_" .. tostring(os.clock())
+        local available = {}
+        for _, server in ipairs(serverList) do
+            local notVisited = not visitedServers[server.id]
+            local notCurrent = server.id ~= game.JobId
+            local hasSpace = server.playing < server.maxPlayers
+            local notReserved = not isServerReserved(server.id, myAccountId)
             
-            -- Limpar antigos
-            for id, ts in pairs(currentVisited) do
-                if now - ts > VISITED_EXPIRY then currentVisited[id] = nil end
+            if notVisited and notCurrent and hasSpace and notReserved then
+                table.insert(available, server)
             end
-
-            local availableServers = {}
-            for _, server in ipairs(result.data) do
-                if server.id ~= game.JobId and not currentVisited[server.id] and server.playing < server.maxPlayers then
-                    table.insert(availableServers, server)
+        end
+        
+        print("[HOP] 📊 Servidores LIVRES (sem reserva): " .. #available)
+        
+        -- Se visitou todos ou nenhum disponível, reseta
+        if #available == 0 then
+            print("[HOP] 🔄 Sem servidores disponíveis! Resetando...")
+            visitedServers = {}
+            visitedServers[game.JobId] = true
+            
+            -- Força atualizar lista (ignora cache)
+            pcall(function()
+                if writefile then
+                    writefile("server_list_cache.json", HttpService:JSONEncode({
+                        timestamp = 0, -- Força expirar cache
+                        servers = {}
+                    }))
                 end
-            end
-
-            if #availableServers > 0 then
-                -- SISTEMA DE PRIORIDADE: 6-8 players (range ideal!)
-                local priorityServers = {}
-                local normalServers = {}
-                
-                for _, server in ipairs(availableServers) do
-                    if server.playing >= 6 and server.playing <= 8 then
-                        table.insert(priorityServers, server)
-                    else
-                        table.insert(normalServers, server)
-                    end
-                end
-                
-                local chosen
-                -- 80% de chance de escolher servidor prioritário (6-8 players)
-                if #priorityServers > 0 and math.random() < 0.8 then
-                    chosen = priorityServers[math.random(1, #priorityServers)]
-                    print("[HOP] 🎯 Servidor PRIORITÁRIO (6-8 players)!")
-                else
-                    table.sort(availableServers, function(a, b) return a.playing < b.playing end)
-                    chosen = availableServers[math.random(1, math.min(20, #availableServers))]
-                end
-                
-                text.Text = "📡 " .. label .. " - " .. string.sub(chosen.id, 1, 8) .. "... (" .. chosen.playing .. "/8)"
-                print("[HOP] Tentando: " .. chosen.id .. " | Players: " .. chosen.playing)
-                
-                currentVisited[chosen.id] = os.time()
-                saveVisitedServers(currentVisited)
-                
-                local teleportSuccess, teleportErr = pcall(function()
-                    TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
-                end)
-                
-                if not teleportSuccess then
-                    print("[HOP] ⚠️ Erro no teleporte: " .. tostring(teleportErr))
-                end
-                
-                task.wait(2)
+            end)
+            
+            print("[HOP] 🌐 Buscando nova lista da API...")
+            serverList = getServerListOnce()
+            
+            if #serverList == 0 then
+                print("[HOP] ⚠️ Nenhum servidor na API! Aguardando 30s...")
+                task.wait(30)
             else
-                text.Text = "⏳ Sem servidores novos disponíveis..."
+                print("[HOP] ✅ Nova lista com " .. #serverList .. " servidores")
                 task.wait(3)
             end
-        else
-            text.Text = "⏳ Erro ao buscar servidores..."
-            task.wait(3)
+            continue
         end
-        task.wait(0.5)
+        
+        -- Escolhe servidor aleatório
+        local chosen = available[math.random(1, #available)]
+        visitedServers[chosen.id] = true
+        
+        -- RESERVA o servidor para outras contas não usarem
+        local myAccountId = tostring(LocalPlayer.UserId) .. "_" .. tostring(os.clock())
+        reserveServer(chosen.id, myAccountId)
+        
+        text.Text = "📡 Hopping... (" .. chosen.playing .. "/" .. chosen.maxPlayers .. ")"
+        print("[HOP] 🚀 Hop → " .. string.sub(chosen.id, 1, 12) .. "... | " .. chosen.playing .. " players [RESERVADO]")
+        
+        local success, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(PLACE_ID, chosen.id, LocalPlayer)
+        end)
+        
+        if success then
+            print("[HOP] ✅ Enviado!")
+            task.wait(15) -- Espera teleporte completar
+        else
+            print("[HOP] ⚠️ Erro: " .. tostring(err))
+            -- Se falhou, marca servidor como problemático e tenta próximo
+            visitedServers[chosen.id] = true
+            task.wait(1) -- Tenta próximo rapidamente
+        end
     end
 end
 
